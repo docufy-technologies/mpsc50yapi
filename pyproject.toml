@@ -1,0 +1,16 @@
+[project]
+name = "mpsc50yapi"
+version = "0.1.0"
+description = "Backend for github.com/docufy-technologies/mpsc50years"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "argon2-cffi>=23.1.0",
+    "cryptography>=45.0.5",
+    "fastapi[all]>=0.116.0",
+    "pydantic[email]>=2.11.2",
+    "pyjwt>=2.10.1",
+    "python-dotenv>=1.1.0",
+    "sqlmodel>=0.0.24",
+]
+
