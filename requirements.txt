@@ -1,0 +1,8 @@
+fastapi[standard]
+sqlalchemy
+pydantic[email]
+pwdlib[argon2]
+pyjwt
+python-multipart
+pytest
+httpx
