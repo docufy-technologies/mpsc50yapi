@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Backend for github.com/docufy-technologies/mpsc50years"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "LICENSE"
 dependencies = [
     "argon2-cffi>=23.1.0",
     "cryptography>=45.0.5",
