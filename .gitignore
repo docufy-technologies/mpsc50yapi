@@ -699,3 +699,4 @@ uv.lock
 users_backup.json
 
 tmp*
+*.db
