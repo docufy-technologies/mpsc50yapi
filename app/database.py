@@ -1,25 +1,18 @@
-import os
+from sqlmodel import Session, create_engine
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from .settings import settings
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./alumni.db")
-
-# SQLite needs this flag because FastAPI uses several threads
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+engine = create_engine(settings.database_uri)
 
 
-class Base(DeclarativeBase):
-    pass
-
-
-def get_db():
-    """Gives each request its own database session, then closes it."""
-    db = SessionLocal()
+def get_database_session():
+    session = Session(
+        bind=engine,
+        autoflush=False,
+        autocommit=False,
+        expire_on_commit=False,
+    )
     try:
-        yield db
+        yield session
     finally:
-        db.close()
+        session.close()
