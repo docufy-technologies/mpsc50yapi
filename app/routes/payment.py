@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlmodel import col, select
 
-from app.dependencies import CurrentAlumna, DBSession
+from app.dependencies import CurrentAlum, DBSession
 from app.helper import now
 from app.models import AlumniPayment, Payment
 from app.schemas.payment import PaymentInformation, PaymentSessionResponse
@@ -26,12 +26,12 @@ OPEN_STATUSES = ("unpaid", "failed")
 
 
 def _own_payment(
-    database_session: DBSession, alumna: CurrentAlumna, payment_uuid: UUID
+    database_session: DBSession, alum: CurrentAlum, payment_uuid: UUID
 ) -> Payment:
     link = database_session.scalar(
         select(AlumniPayment).where(
             AlumniPayment.payment_uuid == payment_uuid,
-            AlumniPayment.alumna_uuid == alumna.uuid,
+            AlumniPayment.alum_uuid == alum.uuid,
         )
     )
     if not link:
@@ -112,22 +112,22 @@ async def _reconcile(
 @router.post(
     "/initiate",
     response_model=PaymentSessionResponse,
-    summary="Create an SSLCommerz session and redirect the alumna to the gateway",
+    summary="Create an SSLCommerz session and redirect the alum to the gateway",
 )
 async def initiate_payment(
-    alumna: CurrentAlumna,
+    alum: CurrentAlum,
     database_session: DBSession,
 ) -> PaymentSessionResponse:
     existing_payments = database_session.scalars(
         select(Payment)
         .join(AlumniPayment, col(AlumniPayment.payment_uuid) == col(Payment.uuid))
-        .where(col(AlumniPayment.alumna_uuid) == alumna.uuid)
+        .where(col(AlumniPayment.alum_uuid) == alum.uuid)
     ).all()
 
     if any(payment.status == "completed" for payment in existing_payments):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Payment for this alumna is already completed",
+            detail="Payment for this alum is already completed",
         )
 
     # Only `unpaid` is reusable. A `failed` payment may still have gateway
@@ -152,7 +152,7 @@ async def initiate_payment(
         database_session.flush()
 
         database_session.add(
-            AlumniPayment(alumna_uuid=alumna.uuid, payment_uuid=payment.uuid)
+            AlumniPayment(alum_uuid=alum.uuid, payment_uuid=payment.uuid)
         )
         database_session.commit()
 
@@ -160,8 +160,8 @@ async def initiate_payment(
         transaction_reference=transaction_reference,
         amount=payment.amount,
         product_name="MPSC 50 Years Golden Jubilee Participation",
-        alumna_email=alumna.email,
-        alumna_name=alumna.full_name,
+        alum_email=alum.email,
+        alum_name=alum.full_name,
         # The browser lands on the API so it is validated before success is shown.
         success_url=f"{settings.api_url}/payments/callback",
         cancel_url=f"{settings.frontend_url}/payment/cancelled",
@@ -178,15 +178,15 @@ async def initiate_payment(
 @router.get(
     "/me",
     response_model=list[PaymentInformation],
-    summary="List the current alumna's payments",
+    summary="List the current alum's payments",
 )
 def list_my_payments(
-    alumna: CurrentAlumna, database_session: DBSession
+    alum: CurrentAlum, database_session: DBSession
 ) -> list[PaymentInformation]:
     payments = database_session.scalars(
         select(Payment)
         .join(AlumniPayment, col(AlumniPayment.payment_uuid) == col(Payment.uuid))
-        .where(col(AlumniPayment.alumna_uuid) == alumna.uuid)
+        .where(col(AlumniPayment.alum_uuid) == alum.uuid)
         .order_by(col(Payment.paid_at).desc())
     ).all()
 
@@ -196,14 +196,14 @@ def list_my_payments(
 @router.get(
     "/{payment_uuid}",
     response_model=PaymentInformation,
-    summary="Get one of the current alumna's payments",
+    summary="Get one of the current alum's payments",
 )
 def get_my_payment(
     payment_uuid: UUID,
-    alumna: CurrentAlumna,
+    alum: CurrentAlum,
     database_session: DBSession,
 ) -> PaymentInformation:
-    return _to_information(_own_payment(database_session, alumna, payment_uuid))
+    return _to_information(_own_payment(database_session, alum, payment_uuid))
 
 
 @router.post(
@@ -257,7 +257,7 @@ async def payment_ipn(
 ) -> dict[str, Any]:
     """Instant Payment Notification.
 
-    This is the reliable signal: it arrives server-to-server even if the alumna
+    This is the reliable signal: it arrives server-to-server even if the alum
     closes the browser before the redirect. SSLCommerz expects a 200 with no
     body, so errors are reported in the payload rather than as status codes.
     """
@@ -307,13 +307,13 @@ async def payment_ipn(
 )
 def confirm_payment_manually(
     payment_uuid: UUID,
-    alumna: CurrentAlumna,
+    alum: CurrentAlum,
     database_session: DBSession,
 ) -> PaymentInformation:
     return _to_information(
         _settle_payment(
             database_session,
-            _own_payment(database_session, alumna, payment_uuid),
+            _own_payment(database_session, alum, payment_uuid),
             ValidationOutcome(is_valid=True, reason="confirmed manually", raw={}),
         )
     )

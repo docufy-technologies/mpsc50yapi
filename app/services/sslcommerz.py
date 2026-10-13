@@ -1,7 +1,7 @@
 """Minimal SSLCommerz session integration.
 
 Only the two calls the event flow needs are implemented: creating a payment
-session (redirect the alumna to the gateway) and validating the gateway's
+session (redirect the alum to the gateway) and validating the gateway's
 callback/IPN so a payment can be marked completed.
 """
 
@@ -41,8 +41,8 @@ async def create_payment_session(
     transaction_reference: str,
     amount: float,
     product_name: str,
-    alumna_email: str,
-    alumna_name: str,
+    alum_email: str,
+    alum_name: str,
     success_url: str,
     cancel_url: str,
     ipn_url: str,
@@ -70,14 +70,14 @@ async def create_payment_session(
         "product_name": product_name,
         "product_category": "Event",
         "product_profile": "general",
-        "cus_name": alumna_name,
-        "cus_email": alumna_email,
+        "cus_name": alum_name,
+        "cus_email": alum_email,
         "cus_add1": "N/A",
         "cus_city": "Dhaka",
         "cus_country": "Bangladesh",
         "cus_phone": "00000000000",
         "shipping_method": "NO",
-        "ship_name": alumna_name,
+        "ship_name": alum_name,
         "ship_add1": "N/A",
         "ship_city": "Dhaka",
         "ship_country": "Bangladesh",

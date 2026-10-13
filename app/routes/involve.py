@@ -4,10 +4,9 @@ from fastapi import APIRouter, HTTPException, status
 from sqlmodel import select
 
 from app.constants import SUBCOMMITTEE_NAMES
-from app.dependencies import CurrentAlumna, DBSession
+from app.dependencies import CurrentAlum, DBSession
 from app.helper import now
 from app.models import (
-    Alumna,
     AlumniProfile,
     OpenMicEntry,
     SponsorOffer,
@@ -33,13 +32,13 @@ router = APIRouter(prefix="/involve", tags=["Get Involved"])
 
 
 @router.get("/referrals/me", response_model=MyReferralsInformation)
-def read_my_referrals(alumna: CurrentAlumna, database_session: DBSession):
+def read_my_referrals(alum: CurrentAlum, database_session: DBSession):
     profile = database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.alumna_uuid == alumna.uuid)
+        select(AlumniProfile).where(AlumniProfile.alum_uuid == alum.uuid)
     )
     if profile is None:
-        raise HTTPException(status_code=404, detail="Alumna profile not found")
-    referrals, qualifying_dates = referrals_for(database_session, alumna.uuid)
+        raise HTTPException(status_code=404, detail="Alum profile not found")
+    referrals, qualifying_dates = referrals_for(database_session, alum.uuid)
     return MyReferralsInformation(
         referral_code=profile.reg_code,
         referral_count=len(qualifying_dates),
@@ -53,18 +52,18 @@ def read_my_referrals(alumna: CurrentAlumna, database_session: DBSession):
     response_model=StallApplicationInformation,
 )
 def create_stall_application(
-    data: StallApplicationInput, alumna: CurrentAlumna, database_session: DBSession
+    data: StallApplicationInput, alum: CurrentAlum, database_session: DBSession
 ) -> StallApplication:
     ensure_open("stall", database_session, now=now)
     existing = database_session.scalar(
-        select(StallApplication).where(StallApplication.alumna_uuid == alumna.uuid)
+        select(StallApplication).where(StallApplication.alum_uuid == alum.uuid)
     )
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A stall application already exists",
         )
-    application = StallApplication(alumna_uuid=alumna.uuid, **data.model_dump())
+    application = StallApplication(alum_uuid=alum.uuid, **data.model_dump())
     database_session.add(application)
     database_session.commit()
     database_session.refresh(application)
@@ -73,10 +72,10 @@ def create_stall_application(
 
 @router.get("/stall/me", response_model=StallApplicationInformation)
 def read_my_stall_application(
-    alumna: CurrentAlumna, database_session: DBSession
+    alum: CurrentAlum, database_session: DBSession
 ) -> StallApplication:
     application = database_session.scalar(
-        select(StallApplication).where(StallApplication.alumna_uuid == alumna.uuid)
+        select(StallApplication).where(StallApplication.alum_uuid == alum.uuid)
     )
     if not application:
         raise HTTPException(
@@ -87,11 +86,11 @@ def read_my_stall_application(
 
 @router.put("/stall/me", response_model=StallApplicationInformation)
 def update_my_stall_application(
-    data: StallApplicationInput, alumna: CurrentAlumna, database_session: DBSession
+    data: StallApplicationInput, alum: CurrentAlum, database_session: DBSession
 ) -> StallApplication:
     ensure_open("stall", database_session, now=now)
     application = database_session.scalar(
-        select(StallApplication).where(StallApplication.alumna_uuid == alumna.uuid)
+        select(StallApplication).where(StallApplication.alum_uuid == alum.uuid)
     )
     if not application:
         raise HTTPException(
@@ -113,15 +112,15 @@ def update_my_stall_application(
 
 @router.post("/sponsor", status_code=status.HTTP_201_CREATED, response_model=SponsorOfferInformation)
 def create_sponsor_offer(
-    data: SponsorOfferInput, alumna: CurrentAlumna, database_session: DBSession
+    data: SponsorOfferInput, alum: CurrentAlum, database_session: DBSession
 ) -> SponsorOffer:
     ensure_open("sponsor", database_session, now=now)
     count = len(database_session.exec(
-        select(SponsorOffer).where(SponsorOffer.alumna_uuid == alumna.uuid)
+        select(SponsorOffer).where(SponsorOffer.alum_uuid == alum.uuid)
     ).all())
     if count >= settings.sponsor_offer_limit:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Sponsor offer limit reached")
-    offer = SponsorOffer(alumna_uuid=alumna.uuid, **data.model_dump())
+    offer = SponsorOffer(alum_uuid=alum.uuid, **data.model_dump())
     database_session.add(offer)
     database_session.commit()
     database_session.refresh(offer)
@@ -129,10 +128,10 @@ def create_sponsor_offer(
 
 
 @router.get("/sponsor/me", response_model=list[SponsorOfferInformation])
-def read_my_sponsor_offers(alumna: CurrentAlumna, database_session: DBSession) -> list[SponsorOffer]:
+def read_my_sponsor_offers(alum: CurrentAlum, database_session: DBSession) -> list[SponsorOffer]:
     return database_session.exec(
         select(SponsorOffer)
-        .where(SponsorOffer.alumna_uuid == alumna.uuid)
+        .where(SponsorOffer.alum_uuid == alum.uuid)
         .order_by(SponsorOffer.created_at.desc())
     ).all()
 
@@ -149,13 +148,13 @@ def subcommittee_options() -> list[str]:
 )
 def create_subcommittee_application(
     data: SubcommitteeApplicationInput,
-    alumna: CurrentAlumna,
+    alum: CurrentAlum,
     database_session: DBSession,
 ) -> SubcommitteeApplication:
     ensure_open("subcommittee", database_session, now=now)
     existing = database_session.scalar(
         select(SubcommitteeApplication).where(
-            SubcommitteeApplication.alumna_uuid == alumna.uuid
+            SubcommitteeApplication.alum_uuid == alum.uuid
         )
     )
     if existing:
@@ -165,7 +164,7 @@ def create_subcommittee_application(
         )
 
     application = SubcommitteeApplication(
-        alumna_uuid=alumna.uuid, **data.model_dump()
+        alum_uuid=alum.uuid, **data.model_dump()
     )
     database_session.add(application)
     database_session.commit()
@@ -177,11 +176,11 @@ def create_subcommittee_application(
     "/subcommittee/me", response_model=SubcommitteeApplicationInformation
 )
 def read_my_subcommittee_application(
-    alumna: CurrentAlumna, database_session: DBSession
+    alum: CurrentAlum, database_session: DBSession
 ) -> SubcommitteeApplication:
     application = database_session.scalar(
         select(SubcommitteeApplication).where(
-            SubcommitteeApplication.alumna_uuid == alumna.uuid
+            SubcommitteeApplication.alum_uuid == alum.uuid
         )
     )
     if not application:
@@ -197,13 +196,13 @@ def read_my_subcommittee_application(
 )
 def update_my_subcommittee_application(
     data: SubcommitteeApplicationInput,
-    alumna: CurrentAlumna,
+    alum: CurrentAlum,
     database_session: DBSession,
 ) -> SubcommitteeApplication:
     ensure_open("subcommittee", database_session, now=now)
     application = database_session.scalar(
         select(SubcommitteeApplication).where(
-            SubcommitteeApplication.alumna_uuid == alumna.uuid
+            SubcommitteeApplication.alum_uuid == alum.uuid
         )
     )
     if not application:
@@ -232,12 +231,12 @@ def update_my_subcommittee_application(
     response_model=OpenMicEntryInformation,
 )
 def create_openmic_entry(
-    data: OpenMicEntryInput, alumna: CurrentAlumna, database_session: DBSession
+    data: OpenMicEntryInput, alum: CurrentAlum, database_session: DBSession
 ) -> OpenMicEntry:
     ensure_open("openmic", database_session, now=now)
     count = len(
         database_session.exec(
-            select(OpenMicEntry).where(OpenMicEntry.alumna_uuid == alumna.uuid)
+            select(OpenMicEntry).where(OpenMicEntry.alum_uuid == alum.uuid)
         ).all()
     )
     if count >= settings.openmic_entry_limit:
@@ -245,7 +244,7 @@ def create_openmic_entry(
             status_code=status.HTTP_409_CONFLICT,
             detail="Open mic entry limit reached",
         )
-    entry = OpenMicEntry(alumna_uuid=alumna.uuid, **data.model_dump())
+    entry = OpenMicEntry(alum_uuid=alum.uuid, **data.model_dump())
     database_session.add(entry)
     database_session.commit()
     database_session.refresh(entry)
@@ -254,23 +253,23 @@ def create_openmic_entry(
 
 @router.get("/openmic/me", response_model=list[OpenMicEntryInformation])
 def read_my_openmic_entries(
-    alumna: CurrentAlumna, database_session: DBSession
+    alum: CurrentAlum, database_session: DBSession
 ) -> list[OpenMicEntry]:
     return database_session.exec(
-        select(OpenMicEntry).where(OpenMicEntry.alumna_uuid == alumna.uuid)
+        select(OpenMicEntry).where(OpenMicEntry.alum_uuid == alum.uuid)
         .order_by(OpenMicEntry.created_at.desc())
     ).all()
 
 
 @router.put("/openmic/{entry_uuid}", response_model=OpenMicEntryInformation)
 def update_my_openmic_entry(
-    entry_uuid: UUID, data: OpenMicEntryInput, alumna: CurrentAlumna, database_session: DBSession
+    entry_uuid: UUID, data: OpenMicEntryInput, alum: CurrentAlum, database_session: DBSession
 ) -> OpenMicEntry:
     ensure_open("openmic", database_session, now=now)
     entry = database_session.scalar(
         select(OpenMicEntry).where(
             OpenMicEntry.uuid == entry_uuid,
-            OpenMicEntry.alumna_uuid == alumna.uuid,
+            OpenMicEntry.alum_uuid == alum.uuid,
         )
     )
     if entry is None:
@@ -287,12 +286,12 @@ def update_my_openmic_entry(
 
 
 @router.delete("/openmic/{entry_uuid}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_my_openmic_entry(entry_uuid: UUID, alumna: CurrentAlumna, database_session: DBSession) -> None:
+def delete_my_openmic_entry(entry_uuid: UUID, alum: CurrentAlum, database_session: DBSession) -> None:
     ensure_open("openmic", database_session, now=now)
     entry = database_session.scalar(
         select(OpenMicEntry).where(
             OpenMicEntry.uuid == entry_uuid,
-            OpenMicEntry.alumna_uuid == alumna.uuid,
+            OpenMicEntry.alum_uuid == alum.uuid,
         )
     )
     if entry is None:
