@@ -18,8 +18,8 @@ from app.schemas.alumni import (
     AcquaintanceInformation,
     AddressInformation,
     AlumInformation,
-    AlumRegister,
     AlumniProfileInformation,
+    AlumRegister,
     UpdateProfileRequest,
     WorkProfileInformation,
 )
@@ -84,9 +84,7 @@ def _alum_information(alum: Alum, database_session: Session) -> AlumInformation:
         created_at=alum.created_at,
         profile=profile_information,
         acquaintances=[
-            AcquaintanceInformation.model_validate(
-                acquaintance, from_attributes=True
-            )
+            AcquaintanceInformation.model_validate(acquaintance, from_attributes=True)
             for acquaintance in acquaintances
         ],
     )
@@ -134,9 +132,7 @@ def register(data: AlumRegister, database_session: DBSession):
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Referrer registration code not found",
             )
-        if not referrer.alum_uuid or not database_session.get(
-            Alum, referrer.alum_uuid
-        ):
+        if not referrer.alum_uuid or not database_session.get(Alum, referrer.alum_uuid):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Referrer registration code is not linked to an alum",
@@ -207,9 +203,7 @@ def register(data: AlumRegister, database_session: DBSession):
     summary="Authenticate an alum and issue an access token",
 )
 def login(cred: AlumLogin, database_session: DBSession):
-    alum = database_session.scalar(
-        select(Alum).where(Alum.email == cred.email.lower())
-    )
+    alum = database_session.scalar(select(Alum).where(Alum.email == cred.email.lower()))
     if not alum or not verify_password(cred.password, alum.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
@@ -239,9 +233,7 @@ def logout():
     response = JSONResponse(
         status_code=status.HTTP_200_OK, content={"message": "Logged out successfully"}
     )
-    response.delete_cookie(
-        **settings.delete_cookie_config(settings.access_token_name)
-    )
+    response.delete_cookie(**settings.delete_cookie_config(settings.access_token_name))
     return response
 
 
@@ -272,9 +264,7 @@ def refresh_access_token(request: Request, database_session: DBSession):
             )
 
         alum = database_session.scalar(
-            select(Alum).where(
-                Alum.uuid == UUID(uuid_str), Alum.status != "cancelled"
-            )
+            select(Alum).where(Alum.uuid == UUID(uuid_str), Alum.status != "cancelled")
         )
         if not alum:
             raise HTTPException(
@@ -317,9 +307,7 @@ def verify_token(request: Request, database_session: DBSession) -> dict[str, Any
         # A valid signature is not enough: the account must still exist and not
         # be cancelled, or a dead alum stays "validated".
         alum = database_session.scalar(
-            select(Alum).where(
-                Alum.uuid == UUID(uuid_str), Alum.status != "cancelled"
-            )
+            select(Alum).where(Alum.uuid == UUID(uuid_str), Alum.status != "cancelled")
         )
         if not alum:
             raise HTTPException(
@@ -367,9 +355,7 @@ def update_alum_profile(
     return _alum_information(alum, database_session)
 
 
-@router.put(
-    "/update-password", summary="Update the current alum's password"
-)
+@router.put("/update-password", summary="Update the current alum's password")
 def update_alum_password(
     cred: PasswordUpdate,
     alum: CurrentAlum,
