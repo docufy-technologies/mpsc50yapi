@@ -20,22 +20,24 @@ class Settings(BaseSettings):
     frontend_url: str = Field(
         default="http://localhost:3000", validation_alias="FRONTEND_URL"
     )
-    sslcommerz_store_id: str | None = Field(
-        default=None, validation_alias="SSLCOMMERZ_STORE_ID"
+    sslcommerz_store_id: str = Field(
+        default=..., validation_alias="SSLCOMMERZ_STORE_ID"
     )
-    sslcommerz_store_password: str | None = Field(
-        default=None, validation_alias="SSLCOMMERZ_STORE_PASSWORD"
+    sslcommerz_store_password: str = Field(
+        default=..., validation_alias="SSLCOMMERZ_STORE_PASSWORD"
     )
     sslcommerz_is_sandbox: bool = Field(
         default=True, validation_alias="SSLCOMMERZ_IS_SANDBOX"
     )
     # Must be the API, not the frontend: the browser lands here to validate.
-    api_url: str = Field(
-        default="http://localhost:8000", validation_alias="API_URL"
-    )
+    api_url: str = Field(default="http://localhost:8000", validation_alias="API_URL")
     event_fee_bdt: int = Field(default=1500, validation_alias="EVENT_FEE_BDT")
-    sponsor_offer_limit: int = Field(default=3, validation_alias="SPONSOR_OFFER_LIMIT", gt=0)
-    openmic_entry_limit: int = Field(default=2, validation_alias="OPENMIC_ENTRY_LIMIT", gt=0)
+    sponsor_offer_limit: int = Field(
+        default=3, validation_alias="SPONSOR_OFFER_LIMIT", gt=0
+    )
+    openmic_entry_limit: int = Field(
+        default=2, validation_alias="OPENMIC_ENTRY_LIMIT", gt=0
+    )
     openmic_max_duration_minutes: int = Field(
         default=10, validation_alias="OPENMIC_MAX_DURATION_MINUTES", gt=0
     )
