@@ -37,39 +37,46 @@ router = APIRouter(prefix="/auth", tags=["Authentication Routes"])
 
 
 def _alum_information(alum: Alum, database_session: Session) -> AlumInformation:
+
     profile = database_session.scalar(
         select(AlumniProfile).where(AlumniProfile.alum_uuid == alum.uuid)
     )
 
+    assert profile is not None
+    # reasoning[rakibulhasanratul]: According to the current design,
+    # Alum is the bare minimum login entity & AlumniProfile holds the
+    # extended information about an Alum. So, it is obvious that we
+    # shall find a profile each alum
+
     profile_information = None
-    if profile:
-        work_profile_information = None
-        if profile.work_profile_uuid:
-            work_profile = database_session.get(WorkProfile, profile.work_profile_uuid)
-            if work_profile:
-                work_profile_information = WorkProfileInformation.model_validate(
-                    work_profile, from_attributes=True
-                )
 
-        address_information = None
-        if profile.address_uuid:
-            address = database_session.get(Address, profile.address_uuid)
-            if address:
-                address_information = AddressInformation.model_validate(
-                    address, from_attributes=True
-                )
+    work_profile_information = None
+    if profile.work_profile_uuid:
+        work_profile = database_session.get(WorkProfile, profile.work_profile_uuid)
+        if work_profile:
+            work_profile_information = WorkProfileInformation.model_validate(
+                work_profile, from_attributes=True
+            )
 
-        profile_information = AlumniProfileInformation(
-            uuid=profile.uuid,
-            reg_code=profile.reg_code,
-            student_id=profile.student_id,
-            batch_year=profile.batch_year,
-            tee_shirt_size=profile.tee_shirt_size,
-            academic_group=profile.academic_group,
-            registered_at=profile.registered_at,
-            work_profile=work_profile_information,
-            address=address_information,
-        )
+    address_information = None
+    if profile.address_uuid:
+        address = database_session.get(Address, profile.address_uuid)
+        if address:
+            address_information = AddressInformation.model_validate(
+                address, from_attributes=True
+            )
+
+    profile_information = AlumniProfileInformation(
+        uuid=profile.uuid,
+        reg_code=profile.reg_code,
+        student_id=profile.student_id,
+        batch_year=profile.batch_year,
+        tee_shirt_size=profile.tee_shirt_size,
+        academic_group=profile.academic_group,
+        registered_at=profile.registered_at,
+        work_profile=work_profile_information,
+        address=address_information,
+    )
 
     acquaintances = database_session.scalars(
         select(Acquaintance).where(Acquaintance.alum_uuid == alum.uuid)
