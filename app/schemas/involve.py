@@ -2,11 +2,18 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from app.constants import SUBCOMMITTEE_NAMES
 from app.settings import settings
-from app.types import StallApplicationStatus, StallFeeStatus, SubmissionStatus
+from app.types import ApplicationStatus, StallFeeStatus, SubmissionStatus
 
 
 class SubcommitteeApplicationInput(BaseModel):
@@ -72,7 +79,10 @@ class SponsorOfferInput(BaseModel):
     def validate_sponsor_fields(self):
         if self.sponsor_type == "company" and not self.sponsor_name.strip():
             raise ValueError("Company sponsorship requires a company name")
-        if self.sponsor_type == "in_kind" and not (self.in_kind_description or "").strip():
+        if (
+            self.sponsor_type == "in_kind"
+            and not (self.in_kind_description or "").strip()
+        ):
             raise ValueError("In-kind sponsorship requires a description")
         if self.sponsor_type != "in_kind" and self.proposed_amount_bdt is None:
             raise ValueError("Proposed amount is required for cash sponsorship")
@@ -219,7 +229,7 @@ class StallApplicationInformation(BaseModel):
     number_of_helpers: int
     contact_phone: str
     website_or_social_link: str | None
-    status: StallApplicationStatus
+    status: ApplicationStatus
     stall_fee_status: StallFeeStatus
     admin_note: str | None
     created_at: datetime
