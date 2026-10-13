@@ -30,7 +30,7 @@ class SubcommitteeApplication(SQLModel, table=True):
     __tablename__ = "subcommittee_applications"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alumna_uuid: UUID = Field(
+    alum_uuid: UUID = Field(
         foreign_key="alumni.uuid", ondelete="CASCADE", unique=True
     )
     first_choice: str
@@ -47,7 +47,7 @@ class SponsorOffer(SQLModel, table=True):
     __tablename__ = "sponsor_offers"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alumna_uuid: UUID = Field(foreign_key="alumni.uuid", ondelete="CASCADE", index=True)
+    alum_uuid: UUID = Field(foreign_key="alumni.uuid", ondelete="CASCADE", index=True)
     sponsor_type: str
     sponsor_name: str
     contact_person: str
@@ -65,7 +65,7 @@ class OpenMicEntry(SQLModel, table=True):
     __tablename__ = "openmic_entries"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alumna_uuid: UUID = Field(foreign_key="alumni.uuid", ondelete="CASCADE", index=True)
+    alum_uuid: UUID = Field(foreign_key="alumni.uuid", ondelete="CASCADE", index=True)
     performance_type: str
     title_or_description: str = Field(sa_type=Text)
     duration_minutes: int
@@ -82,7 +82,7 @@ class StallApplication(SQLModel, table=True):
     __tablename__ = "stall_applications"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alumna_uuid: UUID = Field(
+    alum_uuid: UUID = Field(
         foreign_key="alumni.uuid", ondelete="CASCADE", unique=True
     )
     stall_name: str = Field(max_length=200)
@@ -101,7 +101,7 @@ class StallApplication(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=now)
 
 
-class Alumna(SQLModel, table=True):
+class Alum(SQLModel, table=True):
     __tablename__ = "alumni"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -117,7 +117,7 @@ class AlumniPayment(SQLModel, table=True):
     __tablename__ = "alumni_payments"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alumna_uuid: UUID | None = Field(
+    alum_uuid: UUID | None = Field(
         default=None, foreign_key="alumni.uuid", ondelete="CASCADE"
     )
     payment_uuid: UUID | None = Field(
@@ -153,12 +153,12 @@ class AlumniProfile(SQLModel, table=True):
     __tablename__ = "alumni_profiles"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alumna_uuid: UUID | None = Field(
+    alum_uuid: UUID | None = Field(
         default=None, foreign_key="alumni.uuid", unique=True, ondelete="CASCADE"
     )
     reg_code: str = Field(unique=True)
     student_id: str | None = Field(default=None)
-    referred_by_alumna_uuid: UUID | None = Field(
+    referred_by_alum_uuid: UUID | None = Field(
         default=None, foreign_key="alumni.uuid", ondelete="SET NULL", index=True
     )
     batch_year: int
@@ -181,9 +181,19 @@ class Acquaintance(SQLModel, table=True):
     __tablename__ = "acquaintances"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alumna_uuid: UUID | None = Field(
+    alum_uuid: UUID | None = Field(
         default=None, foreign_key="alumni.uuid", ondelete="CASCADE"
     )
     full_name: str
     relation: str
     age_group: str
+
+
+class Admin(SQLModel, table=True):
+    __tablename__ = "admins"  # type: ignore[assignment]
+
+    uuid: UUID = Field(default_factory=uuid4, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    password_hash: str
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=now, index=True)

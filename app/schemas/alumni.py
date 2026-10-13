@@ -62,7 +62,7 @@ class AlumniProfileInformation(BaseModel):
     address: AddressInformation | None = None
 
 
-class AlumnaInformation(BaseModel):
+class AlumInformation(BaseModel):
     uuid: UUID
     full_name: str
     email: EmailStr
@@ -70,12 +70,12 @@ class AlumnaInformation(BaseModel):
     status: str
     created_at: datetime
     profile: AlumniProfileInformation | None = None
-    # Only populated by the admin projection; alumna routes leave it empty.
+    # Only populated by the admin projection; alum routes leave it empty.
     payment: AdminPaymentSummary = Field(default_factory=AdminPaymentSummary)
     acquaintances: list[AcquaintanceInformation] = Field(default_factory=list)
 
 
-class AlumnaRegister(BaseModel):
+class AlumRegister(BaseModel):
     full_name: str = Field(min_length=2, max_length=150)
     email: EmailStr
     phone_number: str = Field(max_length=16)
@@ -95,5 +95,5 @@ class AlumnaRegister(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=150)
-    # Must match the Alumna.phone_number column width, as AlumnaRegister does.
+    # Must match the Alum.phone_number column width, as AlumRegister does.
     phone_number: str | None = Field(default=None, max_length=16)

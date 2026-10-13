@@ -23,7 +23,7 @@ class PaymentSessionResponse(BaseModel):
 
 
 class AdminPaymentSummary(BaseModel):
-    """Latest payment for one alumna. Defaults to unpaid."""
+    """Latest payment for one alum. Defaults to unpaid."""
 
     has_paid: bool = False
     latest_status: PaymentStatus = "unpaid"

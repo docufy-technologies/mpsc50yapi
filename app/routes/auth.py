@@ -5,25 +5,25 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 
-from app.dependencies import CurrentAlumna, DBSession
+from app.dependencies import CurrentAlum, DBSession
 from app.helper import generate_reg_code
 from app.models import (
     Acquaintance,
     Address,
-    Alumna,
+    Alum,
     AlumniProfile,
     WorkProfile,
 )
 from app.schemas.alumni import (
     AcquaintanceInformation,
     AddressInformation,
-    AlumnaInformation,
-    AlumnaRegister,
+    AlumInformation,
+    AlumRegister,
     AlumniProfileInformation,
     UpdateProfileRequest,
     WorkProfileInformation,
 )
-from app.schemas.authentication import AlumnaLogin, PasswordUpdate, Token
+from app.schemas.authentication import AlumLogin, PasswordUpdate, Token
 from app.services.authentication import hash_password, verify_password
 from app.services.token import (
     ACCESS_TOKEN_TTL_SECONDS,
@@ -36,9 +36,9 @@ from app.settings import settings
 router = APIRouter(prefix="/auth", tags=["Authentication Routes"])
 
 
-def _alumna_information(alumna: Alumna, database_session: Session) -> AlumnaInformation:
+def _alum_information(alum: Alum, database_session: Session) -> AlumInformation:
     profile = database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.alumna_uuid == alumna.uuid)
+        select(AlumniProfile).where(AlumniProfile.alum_uuid == alum.uuid)
     )
 
     profile_information = None
@@ -72,16 +72,16 @@ def _alumna_information(alumna: Alumna, database_session: Session) -> AlumnaInfo
         )
 
     acquaintances = database_session.scalars(
-        select(Acquaintance).where(Acquaintance.alumna_uuid == alumna.uuid)
+        select(Acquaintance).where(Acquaintance.alum_uuid == alum.uuid)
     ).all()
 
-    return AlumnaInformation(
-        uuid=alumna.uuid,
-        full_name=alumna.full_name,
-        email=alumna.email,
-        phone_number=alumna.phone_number,
-        status=alumna.status,
-        created_at=alumna.created_at,
+    return AlumInformation(
+        uuid=alum.uuid,
+        full_name=alum.full_name,
+        email=alum.email,
+        phone_number=alum.phone_number,
+        status=alum.status,
+        created_at=alum.created_at,
         profile=profile_information,
         acquaintances=[
             AcquaintanceInformation.model_validate(
@@ -95,16 +95,16 @@ def _alumna_information(alumna: Alumna, database_session: Session) -> AlumnaInfo
 @router.post(
     "/register",
     status_code=status.HTTP_201_CREATED,
-    response_model=AlumnaInformation,
+    response_model=AlumInformation,
     summary=(
-        "Register a new alumna and issue an access token. "
+        "Register a new alum and issue an access token. "
         "The response carries the same body as /auth/login so the client can go "
         "straight to POST /payments/initiate."
     ),
 )
-def register(data: AlumnaRegister, database_session: DBSession):
+def register(data: AlumRegister, database_session: DBSession):
     email = data.email.lower()
-    if database_session.scalar(select(Alumna).where(Alumna.email == email)):
+    if database_session.scalar(select(Alum).where(Alum.email == email)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This email is already registered",
@@ -124,7 +124,7 @@ def register(data: AlumnaRegister, database_session: DBSession):
         if data.referrer == reg_code:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="An alumna cannot refer herself",
+                detail="An alum cannot refer herself",
             )
         referrer = database_session.scalar(
             select(AlumniProfile).where(AlumniProfile.reg_code == data.referrer)
@@ -134,22 +134,22 @@ def register(data: AlumnaRegister, database_session: DBSession):
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Referrer registration code not found",
             )
-        if not referrer.alumna_uuid or not database_session.get(
-            Alumna, referrer.alumna_uuid
+        if not referrer.alum_uuid or not database_session.get(
+            Alum, referrer.alum_uuid
         ):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Referrer registration code is not linked to an alumna",
+                detail="Referrer registration code is not linked to an alum",
             )
 
-    alumna = Alumna(
+    alum = Alum(
         full_name=data.full_name,
         email=email,
         phone_number=data.phone_number,
         password_hash=hash_password(data.password),
         status="pending",
     )
-    database_session.add(alumna)
+    database_session.add(alum)
     database_session.flush()
 
     work_profile: WorkProfile | None = None
@@ -166,13 +166,13 @@ def register(data: AlumnaRegister, database_session: DBSession):
         database_session.flush()
 
     profile = AlumniProfile(
-        alumna_uuid=alumna.uuid,
+        alum_uuid=alum.uuid,
         reg_code=reg_code,
         student_id=data.student_id,
         batch_year=data.batch_year,
         tee_shirt_size=data.tee_shirt_size,
         academic_group=data.academic_group,
-        referred_by_alumna_uuid=referrer.alumna_uuid if referrer else None,
+        referred_by_alum_uuid=referrer.alum_uuid if referrer else None,
         work_profile_uuid=work_profile.uuid if work_profile else None,
         address_uuid=address.uuid if address else None,
     )
@@ -180,16 +180,16 @@ def register(data: AlumnaRegister, database_session: DBSession):
 
     for acquaintance in data.acquaintances:
         database_session.add(
-            Acquaintance(alumna_uuid=alumna.uuid, **acquaintance.model_dump())
+            Acquaintance(alum_uuid=alum.uuid, **acquaintance.model_dump())
         )
 
     database_session.commit()
-    database_session.refresh(alumna)
+    database_session.refresh(alum)
 
     # Registration sets the cookie too: the flow is register -> pay -> approval,
-    # so a pending alumna must be able to reach /payments/initiate without logging in.
-    access_token = encode_access_token({"uuid": str(alumna.uuid)})
-    response_data = _alumna_information(alumna, database_session)
+    # so a pending alum must be able to reach /payments/initiate without logging in.
+    access_token = encode_access_token({"uuid": str(alum.uuid)})
+    response_data = _alum_information(alum, database_session)
 
     response = JSONResponse(
         status_code=status.HTTP_201_CREATED,
@@ -203,26 +203,26 @@ def register(data: AlumnaRegister, database_session: DBSession):
 
 @router.post(
     "/login",
-    response_model=AlumnaInformation,
-    summary="Authenticate an alumna and issue an access token",
+    response_model=AlumInformation,
+    summary="Authenticate an alum and issue an access token",
 )
-def login(cred: AlumnaLogin, database_session: DBSession):
-    alumna = database_session.scalar(
-        select(Alumna).where(Alumna.email == cred.email.lower())
+def login(cred: AlumLogin, database_session: DBSession):
+    alum = database_session.scalar(
+        select(Alum).where(Alum.email == cred.email.lower())
     )
-    if not alumna or not verify_password(cred.password, alumna.password_hash):
+    if not alum or not verify_password(cred.password, alum.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )
-    # Only `cancelled` is refused; a `pending` alumna has paid but is unapproved.
-    if alumna.status == "cancelled":
+    # Only `cancelled` is refused; a `pending` alum has paid but is unapproved.
+    if alum.status == "cancelled":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is not active",
         )
 
-    access_token = encode_access_token({"uuid": str(alumna.uuid)})
-    response_data = _alumna_information(alumna, database_session)
+    access_token = encode_access_token({"uuid": str(alum.uuid)})
+    response_data = _alum_information(alum, database_session)
 
     response = JSONResponse(
         status_code=status.HTTP_200_OK,
@@ -234,7 +234,7 @@ def login(cred: AlumnaLogin, database_session: DBSession):
     return response
 
 
-@router.post("/logout", summary="Log out the current alumna")
+@router.post("/logout", summary="Log out the current alum")
 def logout():
     response = JSONResponse(
         status_code=status.HTTP_200_OK, content={"message": "Logged out successfully"}
@@ -247,7 +247,7 @@ def logout():
 
 @router.post(
     "/refresh-token",
-    summary="Refresh the current alumna's access token",
+    summary="Refresh the current alum's access token",
     response_model=Token,
 )
 def refresh_access_token(request: Request, database_session: DBSession):
@@ -271,12 +271,12 @@ def refresh_access_token(request: Request, database_session: DBSession):
                 detail="Token is expired beyond the refresh window",
             )
 
-        alumna = database_session.scalar(
-            select(Alumna).where(
-                Alumna.uuid == UUID(uuid_str), Alumna.status != "cancelled"
+        alum = database_session.scalar(
+            select(Alum).where(
+                Alum.uuid == UUID(uuid_str), Alum.status != "cancelled"
             )
         )
-        if not alumna:
+        if not alum:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
             )
@@ -315,19 +315,19 @@ def verify_token(request: Request, database_session: DBSession) -> dict[str, Any
             )
 
         # A valid signature is not enough: the account must still exist and not
-        # be cancelled, or a dead alumna stays "validated".
-        alumna = database_session.scalar(
-            select(Alumna).where(
-                Alumna.uuid == UUID(uuid_str), Alumna.status != "cancelled"
+        # be cancelled, or a dead alum stays "validated".
+        alum = database_session.scalar(
+            select(Alum).where(
+                Alum.uuid == UUID(uuid_str), Alum.status != "cancelled"
             )
         )
-        if not alumna:
+        if not alum:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Account is not active",
             )
 
-        return {"message": "Validated", "data": {"uuid": str(alumna.uuid)}}
+        return {"message": "Validated", "data": {"uuid": str(alum.uuid)}}
     except HTTPException:
         raise
     except Exception as e:
@@ -338,48 +338,48 @@ def verify_token(request: Request, database_session: DBSession) -> dict[str, Any
 
 @router.get(
     "/me",
-    summary="Get the current alumna's information",
-    response_model=AlumnaInformation,
+    summary="Get the current alum's information",
+    response_model=AlumInformation,
 )
-def get_alumna_information(alumna: CurrentAlumna, database_session: DBSession):
-    return _alumna_information(alumna, database_session)
+def get_alum_information(alum: CurrentAlum, database_session: DBSession):
+    return _alum_information(alum, database_session)
 
 
 @router.put(
     "/update-profile",
-    summary="Update the current alumna's profile",
-    response_model=AlumnaInformation,
+    summary="Update the current alum's profile",
+    response_model=AlumInformation,
 )
-def update_alumna_profile(
+def update_alum_profile(
     data: UpdateProfileRequest,
-    alumna: CurrentAlumna,
+    alum: CurrentAlum,
     database_session: DBSession,
 ):
     if data.full_name is not None:
-        alumna.full_name = data.full_name
+        alum.full_name = data.full_name
     if data.phone_number is not None:
-        alumna.phone_number = data.phone_number
+        alum.phone_number = data.phone_number
 
-    database_session.add(alumna)
+    database_session.add(alum)
     database_session.commit()
-    database_session.refresh(alumna)
+    database_session.refresh(alum)
 
-    return _alumna_information(alumna, database_session)
+    return _alum_information(alum, database_session)
 
 
 @router.put(
-    "/update-password", summary="Update the current alumna's password"
+    "/update-password", summary="Update the current alum's password"
 )
-def update_alumna_password(
+def update_alum_password(
     cred: PasswordUpdate,
-    alumna: CurrentAlumna,
+    alum: CurrentAlum,
     database_session: DBSession,
 ):
-    if not verify_password(cred.current_password, alumna.password_hash):
+    if not verify_password(cred.current_password, alum.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid current password",
         )
-    alumna.password_hash = hash_password(cred.new_password)
+    alum.password_hash = hash_password(cred.new_password)
     database_session.commit()
     return {"message": "Password updated successfully"}

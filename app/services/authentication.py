@@ -4,8 +4,8 @@ from argon2 import PasswordHasher
 from fastapi import HTTPException, Request, status
 from sqlmodel import select
 
-from app.database import DBSession
-from app.models import Alumna
+from app.dependencies import DBSession
+from app.models import Alum
 from app.services.token import decode_token
 from app.settings import settings
 
@@ -42,12 +42,12 @@ def _get_uuid_from_token(token: str) -> UUID:
         ) from e
 
 
-def get_current_alumna(
+def get_current_alum(
     request: Request,
     database_session: DBSession,
-) -> Alumna:
-    """Resolve the cookie to an alumna. Only "cancelled" is rejected, so a
-    pending alumna can still reach /payments/* before approval."""
+) -> Alum:
+    """Resolve the cookie to an alum. Only "cancelled" is rejected, so a
+    pending alum can still reach /payments/* before approval."""
     token = request.cookies.get(settings.access_token_name)
     if not token:
         raise HTTPException(
@@ -56,12 +56,12 @@ def get_current_alumna(
         )
 
     uuid = _get_uuid_from_token(token)
-    alumna = database_session.scalar(
-        select(Alumna).where(Alumna.uuid == uuid, Alumna.status != "cancelled")
+    alum = database_session.scalar(
+        select(Alum).where(Alum.uuid == uuid, Alum.status != "cancelled")
     )
-    if not alumna:
+    if not alum:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Alumna not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Alum not found"
         )
 
-    return alumna
+    return alum

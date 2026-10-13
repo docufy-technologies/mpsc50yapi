@@ -1,14 +1,16 @@
+from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from sqlmodel import case, col, func, select
 
-from app.dependencies import Admin, DBSession
+from app.dependencies import CurrentAdmin, DBSession
 from app.models import (
     Acquaintance,
     Address,
-    Alumna,
+    Admin,
+    Alum,
     AlumniPayment,
     AlumniProfile,
     Payment,
@@ -17,18 +19,19 @@ from app.models import (
 from app.schemas.alumni import (
     AcquaintanceInformation,
     AddressInformation,
-    AlumnaInformation,
+    AlumInformation,
     AlumniProfileInformation,
     WorkProfileInformation,
 )
-from app.schemas.authentication import AdminLogin, AdminSession
+from app.schemas.authentication import AdminInfo, AdminLogin, AdminSession
 from app.schemas.payment import AdminPaymentSummary
-from app.services.administration import encode_admin_token, is_valid_admin_secret
+from app.schemas.referrals import ReferralDrillDown, ReferralLeaderboardEntry
+from app.services.administration import encode_admin_token
+from app.services.authentication import verify_password
+from app.services.referral_queries import referrals_for
 from app.services.token import ADMIN_TOKEN_TTL_SECONDS
 from app.settings import settings
-from app.schemas.referrals import ReferralDrilldown, ReferralLeaderboardEntry
-from app.services.referral_queries import referrals_for
-from app.types import AccountStatus
+from app.types import AccountStatus, PaymentStatus
 
 router = APIRouter(prefix="/admin", tags=["Administration Routes"])
 
@@ -36,15 +39,17 @@ router = APIRouter(prefix="/admin", tags=["Administration Routes"])
 @router.post(
     "/login",
     response_model=AdminSession,
-    summary="Exchange the admin secret for an admin session cookie",
+    summary="Log an admin in with email + password",
 )
-def admin_login(credentials: AdminLogin) -> JSONResponse:
-    """Sign the admin panel in.
-
-    Returns a dedicated httpOnly cookie rather than telling the browser to store
-    the secret: anything in localStorage is readable by any script on the origin.
-    """
-    if not is_valid_admin_secret(credentials.admin_secret):
+def admin_login(credentials: AdminLogin, database_session: DBSession) -> JSONResponse:
+    admin = database_session.scalar(
+        select(Admin).where(Admin.email == credentials.email.lower())
+    )
+    if (
+        not admin
+        or not admin.is_active
+        or not verify_password(credentials.password, admin.password_hash)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid admin credentials",
@@ -52,12 +57,12 @@ def admin_login(credentials: AdminLogin) -> JSONResponse:
 
     response = JSONResponse(
         status_code=status.HTTP_200_OK,
-        content=AdminSession(
-            expires_in=ADMIN_TOKEN_TTL_SECONDS
-        ).model_dump(),
+        content=AdminSession(expires_in=ADMIN_TOKEN_TTL_SECONDS).model_dump(),
     )
     response.set_cookie(
-        **settings.admin_token_config(encode_admin_token(), ADMIN_TOKEN_TTL_SECONDS)
+        **settings.admin_access_token_config(
+            encode_admin_token(admin.uuid), ADMIN_TOKEN_TTL_SECONDS
+        )
     )
     return response
 
@@ -70,7 +75,9 @@ def admin_logout() -> JSONResponse:
     response = JSONResponse(
         status_code=status.HTTP_200_OK, content={"message": "Admin logged out"}
     )
-    response.delete_cookie(**settings.delete_cookie_config(settings.admin_token_name))
+    response.delete_cookie(
+        **settings.delete_cookie_config(settings.admin_access_token_name)
+    )
     return response
 
 
@@ -78,15 +85,28 @@ def admin_logout() -> JSONResponse:
     "/session",
     summary="Confirm the admin session is still valid",
 )
-def admin_session(_: Admin) -> dict[str, bool]:
-    """Lets the panel choose between the login form and the table."""
+def admin_session(_: CurrentAdmin) -> dict[str, bool]:
     return {"authenticated": True}
 
 
+@router.get(
+    "/me",
+    response_model=AdminInfo,
+    summary="Get the current admin's information",
+)
+def get_admin_information(admin: CurrentAdmin):
+    return AdminInfo(
+        uuid=admin.uuid,
+        email=admin.email,
+        is_active=admin.is_active,
+        created_at=admin.created_at,
+    )
+
+
 def _payment_summary(
-    alumna_uuid: UUID, database_session: DBSession
+    alum_uuid: UUID, database_session: DBSession
 ) -> AdminPaymentSummary:
-    """Payment state for one alumna, in one query to avoid N+1 on the listing.
+    """Payment state for one alum, in one query to avoid N+1 on the listing.
 
     Ordered by status before time: a settled payment takes its timestamp from the
     gateway while a failed one keeps its creation time, so ordering on time alone
@@ -95,7 +115,7 @@ def _payment_summary(
     payment = database_session.scalar(
         select(Payment)
         .join(AlumniPayment, col(AlumniPayment.payment_uuid) == col(Payment.uuid))
-        .where(col(AlumniPayment.alumna_uuid) == alumna_uuid)
+        .where(col(AlumniPayment.alum_uuid) == alum_uuid)
         .order_by(
             # completed first, so a later failure cannot hide a success.
             case((col(Payment.status) == "completed", 0), else_=1),
@@ -109,7 +129,7 @@ def _payment_summary(
 
     return AdminPaymentSummary(
         has_paid=payment.status == "completed",
-        latest_status=payment.status,
+        latest_status=cast(PaymentStatus, payment.status),
         amount=payment.amount,
         transaction_reference=payment.transaction_reference,
         paid_at=payment.paid_at,
@@ -118,21 +138,21 @@ def _payment_summary(
 
 @router.get("/referrals", response_model=list[ReferralLeaderboardEntry])
 def referral_leaderboard(
-    _: AdminSecret, database_session: DBSession
+    _: CurrentAdmin, database_session: DBSession
 ) -> list[ReferralLeaderboardEntry]:
     profiles = database_session.scalars(
-        select(AlumniProfile).where(AlumniProfile.alumna_uuid.is_not(None))
+        select(AlumniProfile).where(col(AlumniProfile.alum_uuid).is_not(None))
     ).all()
     entries = []
     for profile in profiles:
-        alumna = database_session.get(Alumna, profile.alumna_uuid)
-        if not alumna:
+        alum = database_session.get(Alum, profile.alum_uuid)
+        if not alum:
             continue
-        _, dates = referrals_for(database_session, alumna.uuid)
+        _referrals, dates = referrals_for(database_session, alum.uuid)
         entries.append(
             ReferralLeaderboardEntry(
-                alumna_uuid=alumna.uuid,
-                full_name=alumna.full_name,
+                alum_uuid=alum.uuid,
+                full_name=alum.full_name,
                 referral_code=profile.reg_code,
                 referral_count=len(dates),
                 earliest_qualifying_referral=min(dates) if dates else None,
@@ -147,25 +167,25 @@ def referral_leaderboard(
                 if entry.earliest_qualifying_referral
                 else float("inf")
             ),
-            str(entry.alumna_uuid),
+            str(entry.alum_uuid),
         ),
     )
 
 
-@router.get("/referrals/{alumna_uuid}", response_model=ReferralDrilldown)
+@router.get("/referrals/{alum_uuid}", response_model=ReferralDrillDown)
 def referral_drilldown(
-    alumna_uuid: UUID, _: AdminSecret, database_session: DBSession
-) -> ReferralDrilldown:
-    alumna = database_session.get(Alumna, alumna_uuid)
+    alum_uuid: UUID, _: CurrentAdmin, database_session: DBSession
+) -> ReferralDrillDown:
+    alum = database_session.get(Alum, alum_uuid)
     profile = database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.alumna_uuid == alumna_uuid)
+        select(AlumniProfile).where(AlumniProfile.alum_uuid == alum_uuid)
     )
-    if not alumna or not profile:
-        raise HTTPException(status_code=404, detail="Alumna not found")
-    referrals, dates = referrals_for(database_session, alumna_uuid)
-    return ReferralDrilldown(
-        alumna_uuid=alumna.uuid,
-        full_name=alumna.full_name,
+    if not alum or not profile:
+        raise HTTPException(status_code=404, detail="Alum not found")
+    referrals, dates = referrals_for(database_session, alum_uuid)
+    return ReferralDrillDown(
+        alum_uuid=alum.uuid,
+        full_name=alum.full_name,
         referral_code=profile.reg_code,
         referral_count=len(dates),
         earliest_qualifying_referral=min(dates) if dates else None,
@@ -173,10 +193,10 @@ def referral_drilldown(
     )
 
 
-def _full_information(alumna: Alumna, database_session: DBSession) -> AlumnaInformation:
+def _full_information(alum: Alum, database_session: DBSession) -> AlumInformation:
     """Admin-side projection: includes status and profile even when incomplete."""
     profile = database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.alumna_uuid == alumna.uuid)
+        select(AlumniProfile).where(AlumniProfile.alum_uuid == alum.uuid)
     )
 
     profile_information = None
@@ -201,7 +221,9 @@ def _full_information(alumna: Alumna, database_session: DBSession) -> AlumnaInfo
             academic_group=profile.academic_group,
             registered_at=profile.registered_at,
             work_profile=(
-                WorkProfileInformation.model_validate(work_profile, from_attributes=True)
+                WorkProfileInformation.model_validate(
+                    work_profile, from_attributes=True
+                )
                 if work_profile
                 else None
             ),
@@ -213,31 +235,32 @@ def _full_information(alumna: Alumna, database_session: DBSession) -> AlumnaInfo
         )
 
     acquaintances = database_session.scalars(
-        select(Acquaintance).where(Acquaintance.alumna_uuid == alumna.uuid)
+        select(Acquaintance).where(Acquaintance.alum_uuid == alum.uuid)
     ).all()
 
-    return AlumnaInformation(
-        uuid=alumna.uuid,
-        full_name=alumna.full_name,
-        email=alumna.email,
-        phone_number=alumna.phone_number,
-        status=alumna.status,
-        created_at=alumna.created_at,
+    return AlumInformation(
+        uuid=alum.uuid,
+        full_name=alum.full_name,
+        email=alum.email,
+        phone_number=alum.phone_number,
+        status=alum.status,
+        created_at=alum.created_at,
         profile=profile_information,
-        payment=_payment_summary(alumna.uuid, database_session),
+        payment=_payment_summary(alum.uuid, database_session),
         acquaintances=[
             AcquaintanceInformation.model_validate(a, from_attributes=True)
             for a in acquaintances
         ],
     )
 
+
 @router.get(
-    "/alumnae",
-    response_model=list[AlumnaInformation],
-    summary="List registered alumnae, optionally filtered by account status",
+    "/alumni",
+    response_model=list[AlumInformation],
+    summary="List registered alumni, optionally filtered by account status",
 )
-def list_alumnae(
-    _: Admin,
+def list_alumni(
+    _: CurrentAdmin,
     database_session: DBSession,
     status_filter: AccountStatus | None = Query(
         default=None, alias="status", description="pending | confirmed | cancelled"
@@ -245,25 +268,25 @@ def list_alumnae(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
-    statement = select(Alumna)
+    statement = select(Alum)
     if status_filter:
-        statement = statement.where(Alumna.status == status_filter)
+        statement = statement.where(Alum.status == status_filter)
 
-    alumnae = database_session.scalars(
-        statement.order_by(col(Alumna.created_at).desc()).offset(offset).limit(limit)
+    alumni = database_session.scalars(
+        statement.order_by(col(Alum.created_at).desc()).offset(offset).limit(limit)
     ).all()
 
-    return [_full_information(alumna, database_session) for alumna in alumnae]
+    return [_full_information(alum, database_session) for alum in alumni]
 
 
 @router.get(
-    "/alumnae/counts",
-    summary="Count alumnae grouped by account status",
+    "/alumni/counts",
+    summary="Count alumni grouped by account status",
 )
-def count_alumnae(_: Admin, database_session: DBSession) -> dict[str, int]:
+def count_alumni(_: CurrentAdmin, database_session: DBSession) -> dict[str, int]:
     # col() so SQLAlchemy reads this as an expression, not an attribute.
     rows = database_session.execute(
-        select(col(Alumna.status), func.count()).group_by(col(Alumna.status))
+        select(col(Alum.status), func.count()).group_by(col(Alum.status))
     ).all()
 
     counts = {"pending": 0, "confirmed": 0, "cancelled": 0}
@@ -274,25 +297,25 @@ def count_alumnae(_: Admin, database_session: DBSession) -> dict[str, int]:
 
 
 @router.patch(
-    "/alumnae/{alumna_uuid}/status",
-    response_model=AlumnaInformation,
-    summary="Approve, cancel or reactivate an alumna account",
+    "/alumni/{alum_uuid}/status",
+    response_model=AlumInformation,
+    summary="Approve, cancel or reactivate an alum account",
 )
-def update_alumna_status(
-    alumna_uuid: UUID,
+def update_alum_status(
+    alum_uuid: UUID,
     new_status: AccountStatus,
-    _: Admin,
+    _: CurrentAdmin,
     database_session: DBSession,
 ):
-    alumna = database_session.get(Alumna, alumna_uuid)
-    if not alumna:
+    alum = database_session.get(Alum, alum_uuid)
+    if not alum:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Alumna not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Alum not found"
         )
 
-    alumna.status = new_status
-    database_session.add(alumna)
+    alum.status = new_status
+    database_session.add(alum)
     database_session.commit()
-    database_session.refresh(alumna)
+    database_session.refresh(alum)
 
-    return _full_information(alumna, database_session)
+    return _full_information(alum, database_session)
