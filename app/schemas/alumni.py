@@ -86,7 +86,7 @@ class AlumRegister(BaseModel):
     academic_group: AcademicGroup | None = None
     student_id: str | None = None
     reg_code: str | None = None
-    referrer: str | None = Field(default=None, min_length=1, max_length=64)
+    referrer_reg_code: str | None = Field(default=None, min_length=1, max_length=64)
 
     work_profile: WorkProfileCreate | None = None
     address: AddressCreate | None = None

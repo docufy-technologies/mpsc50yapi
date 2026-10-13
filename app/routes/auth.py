@@ -118,14 +118,16 @@ def register(data: AlumRegister, database_session: DBSession):
         )
 
     referrer = None
-    if data.referrer:
-        if data.referrer == reg_code:
+    if data.referrer_reg_code:
+        if data.referrer_reg_code == reg_code:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="An alum cannot refer herself",
             )
         referrer = database_session.scalar(
-            select(AlumniProfile).where(AlumniProfile.reg_code == data.referrer)
+            select(AlumniProfile).where(
+                AlumniProfile.reg_code == data.referrer_reg_code
+            )
         )
         if not referrer:
             raise HTTPException(
