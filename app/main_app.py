@@ -41,8 +41,7 @@ def create_app(*, create_tables: bool = True) -> FastAPI:
     async def lifespan(_: FastAPI):
         # Only safe on SQLite. Use Alembic migrations for real databases;
         # see alembic/ and `alembic upgrade head`.
-        if create_tables and engine.dialect.name == "sqlite":
-            SQLModel.metadata.create_all(bind=engine)
+        SQLModel.metadata.create_all(bind=engine)
         yield
 
     application = FastAPI(

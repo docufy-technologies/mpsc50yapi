@@ -700,10 +700,6 @@ users_backup.json
 
 tmp*
 *.db
+*.db*
 alembic/
-!alembic/
-alembic/*
-!alembic/versions/
-alembic/versions/*
-!alembic/versions/a4e0c21f7b63_openmic_entries.py
-!alembic/versions/b73d9e21c6a4_stall_applications.py
+alembic*
