@@ -24,7 +24,7 @@ from app.schemas.alumni import (
     WorkProfileInformation,
 )
 from app.schemas.authentication import AlumLogin, PasswordUpdate, Token
-from app.services.authentication import hash_password, verify_password
+from app.services.auth import hash_password, verify_password
 from app.services.token import (
     ACCESS_TOKEN_TTL_SECONDS,
     decode_token,
