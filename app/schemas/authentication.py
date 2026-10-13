@@ -1,7 +1,10 @@
+from datetime import datetime
+from uuid import UUID
+
 from pydantic import BaseModel, EmailStr, Field
 
 
-class AlumnaLogin(BaseModel):
+class AlumLogin(BaseModel):
     email: EmailStr
     password: str
 
@@ -17,9 +20,15 @@ class PasswordUpdate(BaseModel):
 
 
 class AdminLogin(BaseModel):
-    """One shared credential, not per-person: approvals are not attributable."""
+    email: EmailStr
+    password: str
 
-    admin_secret: str = Field(min_length=1, max_length=512)
+
+class AdminInfo(BaseModel):
+    uuid: UUID
+    email: str
+    is_active: bool
+    created_at: datetime
 
 
 class AdminSession(BaseModel):
