@@ -22,6 +22,18 @@ class PaymentSessionResponse(BaseModel):
     session_key: str
 
 
+class AdminPaymentSummary(BaseModel):
+    """Latest payment for one alumna. Defaults to unpaid."""
+
+    has_paid: bool = False
+    latest_status: PaymentStatus = "unpaid"
+    amount: int | None = None
+    transaction_reference: str | None = None
+    paid_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class PaymentCallback(BaseModel):
     """Recorded outcome of a validated transaction. Kept for the admin/audit
     view and for tests; the browser callback itself responds with a redirect."""

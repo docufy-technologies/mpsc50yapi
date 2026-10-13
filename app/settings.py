@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(..., validation_alias="JWT_ALGORITHM")
     access_token_name: str = Field(..., validation_alias="ACCESS_TOKEN_NAME")
     admin_secret: str = Field(..., validation_alias="ADMIN_SECRET")
+    # Kept separate from the alumna cookie so the two sessions cannot be confused.
+    admin_token_name: str = Field(
+        default="mpsc_admin_token", validation_alias="ADMIN_TOKEN_NAME"
+    )
 
     cookie_domain: str = Field(default="", validation_alias="COOKIE_DOMAIN")
     frontend_url: str = Field(
@@ -25,9 +29,7 @@ class Settings(BaseSettings):
     sslcommerz_is_sandbox: bool = Field(
         default=True, validation_alias="SSLCOMMERZ_IS_SANDBOX"
     )
-    # Public origin of this API. SSLCommerz redirects the browser here so the
-    # transaction can be validated server-side before the alumna is shown a
-    # success page. Must be the API, not the frontend.
+    # Must be the API, not the frontend: the browser lands here to validate.
     api_url: str = Field(
         default="http://localhost:8000", validation_alias="API_URL"
     )
@@ -58,13 +60,18 @@ class Settings(BaseSettings):
                 return False
         return value
 
-    def access_token_config(self, access_token: str, max_age: int) -> dict[str, Any]:
-        """Build set_cookie kwargs. In dev we must not force Secure/SameSite=None,
-        otherwise the browser silently drops the cookie over plain http://localhost."""
+    def _cookie_config(
+        self, key: str, value: str, max_age: int | None
+    ) -> dict[str, Any]:
+        """Build set_cookie kwargs for one cookie.
+
+        In dev we must not force Secure/SameSite=None, otherwise the browser
+        silently drops the cookie over plain http://localhost.
+        """
         if self.dev_mode:
             return dict(
-                key=self.access_token_name,
-                value=access_token,
+                key=key,
+                value=value,
                 httponly=True,
                 path="/",
                 max_age=max_age,
@@ -74,8 +81,8 @@ class Settings(BaseSettings):
             )
 
         return dict(
-            key=self.access_token_name,
-            value=access_token,
+            key=key,
+            value=value,
             httponly=True,
             path="/",
             max_age=max_age,
@@ -84,12 +91,18 @@ class Settings(BaseSettings):
             domain=self.cookie_domain,
         )
 
-    def delete_access_token_config(self) -> dict[str, Any]:
+    def access_token_config(self, access_token: str, max_age: int) -> dict[str, Any]:
+        return self._cookie_config(self.access_token_name, access_token, max_age)
+
+    def admin_token_config(self, admin_token: str, max_age: int) -> dict[str, Any]:
+        return self._cookie_config(self.admin_token_name, admin_token, max_age)
+
+    def delete_cookie_config(self, key: str) -> dict[str, Any]:
         """delete_cookie requires the exact same path/domain as set_cookie,
         otherwise the browser keeps the original cookie."""
         if self.dev_mode:
-            return dict(path="/", domain=None)
-        return dict(path="/", domain=self.cookie_domain)
+            return dict(key=key, path="/", domain=None)
+        return dict(key=key, path="/", domain=self.cookie_domain)
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

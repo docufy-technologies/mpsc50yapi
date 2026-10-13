@@ -20,6 +20,9 @@ from sqlmodel import Session, SQLModel, create_engine
 from app import models  # noqa: F401  (registers tables on SQLModel.metadata)
 from app.database import get_database_session
 from app.main_app import create_app
+from app.routes import payment as payment_routes
+from app.services import sslcommerz
+from app.services.sslcommerz import PaymentSession
 
 
 @pytest.fixture
@@ -80,6 +83,18 @@ def confirmed_client(client, registration_payload, admin_headers):
 
 
 @pytest.fixture
+def anonymous_client(client):
+    """A `client` with no session cookie.
+
+    POST /auth/register now issues the access cookie (register -> pay -> admin
+    approval), so any fixture that registers leaves the shared `client`
+    authenticated. Tests that assert 401s need this instead.
+    """
+    client.cookies.clear()
+    return client
+
+
+@pytest.fixture
 def client_login(client, confirmed_client):
     """Logs the confirmed alumna in on the shared `client` session."""
     response = client.post(
@@ -88,3 +103,54 @@ def client_login(client, confirmed_client):
     )
     assert response.status_code == 200, "fixture login failed"
     return confirmed_client
+
+@pytest.fixture
+def fake_gateway(monkeypatch):
+    """Replaces the SSLCommerz HTTP calls so the flow can be tested offline."""
+    state: dict = {
+        "validation": {
+            "status": "VALID",
+            "tran_id": "",
+            "amount": "1500.00",
+            "currency": "BDT",
+            "validation_date": "2026-10-12T10:00:00",
+        },
+        "session_calls": [],
+        "validation_calls": [],
+    }
+
+    async def fake_create(**kwargs):
+        state["session_calls"].append(kwargs)
+        return PaymentSession(
+            gateway_url="https://sandbox.sslcommerz.com/EasyCheckOut/test",
+            session_key=f"SESSION-{kwargs['transaction_reference']}",
+        )
+
+    async def fake_validate(transaction_reference):
+        state["validation_calls"].append(transaction_reference)
+        payload = dict(state["validation"])
+        payload.setdefault("tran_id", transaction_reference)
+        if not payload.get("tran_id"):
+            payload["tran_id"] = transaction_reference
+        return payload
+
+    monkeypatch.setattr(payment_routes, "create_payment_session", fake_create)
+    monkeypatch.setattr(payment_routes, "validate_transaction", fake_validate)
+    monkeypatch.setattr(
+        sslcommerz,
+        "create_payment_session",
+        fake_create,
+        raising=False,
+    )
+    return state
+
+
+@pytest.fixture
+def gateway_configured(monkeypatch):
+    from app import settings as settings_module
+
+    monkeypatch.setattr(settings_module.settings, "sslcommerz_store_id", "store123")
+    monkeypatch.setattr(
+        settings_module.settings, "sslcommerz_store_password", "pass123"
+    )
+    return True

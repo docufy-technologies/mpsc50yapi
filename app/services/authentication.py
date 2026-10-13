@@ -46,6 +46,8 @@ def get_current_alumna(
     request: Request,
     database_session: DBSession,
 ) -> Alumna:
+    """Resolve the cookie to an alumna. Only "cancelled" is rejected, so a
+    pending alumna can still reach /payments/* before approval."""
     token = request.cookies.get(settings.access_token_name)
     if not token:
         raise HTTPException(
@@ -55,7 +57,7 @@ def get_current_alumna(
 
     uuid = _get_uuid_from_token(token)
     alumna = database_session.scalar(
-        select(Alumna).where(Alumna.uuid == uuid, Alumna.status == "confirmed")
+        select(Alumna).where(Alumna.uuid == uuid, Alumna.status != "cancelled")
     )
     if not alumna:
         raise HTTPException(

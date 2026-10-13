@@ -88,7 +88,7 @@ def test_delete_cookie_matches_set_cookie_in_production(monkeypatch):
     settings = _settings()
 
     set_config = settings.access_token_config("token", 86400)
-    delete_config = settings.delete_access_token_config()
+    delete_config = settings.delete_cookie_config(settings.access_token_name)
 
     assert delete_config["path"] == set_config["path"]
     assert delete_config["domain"] == set_config["domain"]
@@ -99,7 +99,7 @@ def test_delete_cookie_matches_set_cookie_in_dev(monkeypatch):
     settings = _settings()
 
     set_config = settings.access_token_config("token", 86400)
-    delete_config = settings.delete_access_token_config()
+    delete_config = settings.delete_cookie_config(settings.access_token_name)
 
     assert delete_config["path"] == set_config["path"]
     assert delete_config["domain"] == set_config["domain"] is None
@@ -127,4 +127,8 @@ def test_cookie_domain_is_optional(monkeypatch):
         ADMIN_SECRET="s",
     )
     assert settings.cookie_domain == ""
-    assert settings.delete_access_token_config() == {"path": "/", "domain": None}
+    assert settings.delete_cookie_config(settings.access_token_name) == {
+        "key": settings.access_token_name,
+        "path": "/",
+        "domain": None,
+    }

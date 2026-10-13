@@ -40,12 +40,13 @@ def test_login_rejects_unknown_email(client, confirmed_client):
     assert response.status_code == 401
 
 
-def test_login_blocks_pending_account(client, registration_payload):
-    """This is the deadlock that previously made login unreachable."""
+def test_login_allows_pending_account(client, registration_payload):
+    """An alumna pays before an admin approves her, so she must be able to
+    return and log in while still `pending`."""
     client.post("/auth/register", json=registration_payload)
     response = _login(client)
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Account is not active"
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending"
 
 
 def test_login_blocks_cancelled_account(client, confirmed_client, admin_headers):
@@ -62,8 +63,8 @@ def test_login_never_returns_password_hash(client, confirmed_client):
     assert "password_hash" not in body
 
 
-def test_me_requires_authentication(client, confirmed_client):
-    assert client.get("/auth/me").status_code == 401
+def test_me_requires_authentication(anonymous_client):
+    assert anonymous_client.get("/auth/me").status_code == 401
 
 
 def test_me_returns_profile_for_authenticated_alumna(client, confirmed_client):
@@ -94,8 +95,8 @@ def test_verify_token_accepts_valid_cookie(client, confirmed_client):
     assert response.json()["message"] == "Validated"
 
 
-def test_verify_token_rejects_missing_cookie(client, confirmed_client):
-    assert client.get("/auth/verify-token").status_code == 401
+def test_verify_token_rejects_missing_cookie(anonymous_client):
+    assert anonymous_client.get("/auth/verify-token").status_code == 401
 
 
 def test_verify_token_rejects_token_for_cancelled_account(
@@ -126,8 +127,8 @@ def test_refresh_token_reissues_for_valid_session(client, confirmed_client):
     assert client.get("/auth/me").status_code == 200
 
 
-def test_refresh_token_requires_a_cookie(client, confirmed_client):
-    assert client.post("/auth/refresh-token").status_code == 401
+def test_refresh_token_requires_a_cookie(anonymous_client):
+    assert anonymous_client.post("/auth/refresh-token").status_code == 401
 
 
 def test_refresh_token_rejects_long_expired_token(client, confirmed_client):

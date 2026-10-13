@@ -1,10 +1,19 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlmodel import col, func, select
+from fastapi.responses import JSONResponse
+from sqlmodel import case, col, func, select
 
-from app.dependencies import AdminSecret, DBSession
-from app.models import Acquaintance, Address, Alumna, AlumniProfile, WorkProfile
+from app.dependencies import Admin, DBSession
+from app.models import (
+    Acquaintance,
+    Address,
+    Alumna,
+    AlumniPayment,
+    AlumniProfile,
+    Payment,
+    WorkProfile,
+)
 from app.schemas.alumni import (
     AcquaintanceInformation,
     AddressInformation,
@@ -12,15 +21,99 @@ from app.schemas.alumni import (
     AlumniProfileInformation,
     WorkProfileInformation,
 )
+from app.schemas.authentication import AdminLogin, AdminSession
+from app.schemas.payment import AdminPaymentSummary
+from app.services.administration import encode_admin_token, is_valid_admin_secret
+from app.services.token import ADMIN_TOKEN_TTL_SECONDS
+from app.settings import settings
 from app.schemas.referrals import ReferralDrilldown, ReferralLeaderboardEntry
 from app.services.referral_queries import referrals_for
 from app.types import AccountStatus
 
-router = APIRouter(
-    prefix="/admin",
-    tags=["Administration Routes"],
-    dependencies=[],  # auth applied per-route via AdminSecret
+router = APIRouter(prefix="/admin", tags=["Administration Routes"])
+
+
+@router.post(
+    "/login",
+    response_model=AdminSession,
+    summary="Exchange the admin secret for an admin session cookie",
 )
+def admin_login(credentials: AdminLogin) -> JSONResponse:
+    """Sign the admin panel in.
+
+    Returns a dedicated httpOnly cookie rather than telling the browser to store
+    the secret: anything in localStorage is readable by any script on the origin.
+    """
+    if not is_valid_admin_secret(credentials.admin_secret):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin credentials",
+        )
+
+    response = JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=AdminSession(
+            expires_in=ADMIN_TOKEN_TTL_SECONDS
+        ).model_dump(),
+    )
+    response.set_cookie(
+        **settings.admin_token_config(encode_admin_token(), ADMIN_TOKEN_TTL_SECONDS)
+    )
+    return response
+
+
+@router.post(
+    "/logout",
+    summary="Clear the admin session cookie",
+)
+def admin_logout() -> JSONResponse:
+    response = JSONResponse(
+        status_code=status.HTTP_200_OK, content={"message": "Admin logged out"}
+    )
+    response.delete_cookie(**settings.delete_cookie_config(settings.admin_token_name))
+    return response
+
+
+@router.get(
+    "/session",
+    summary="Confirm the admin session is still valid",
+)
+def admin_session(_: Admin) -> dict[str, bool]:
+    """Lets the panel choose between the login form and the table."""
+    return {"authenticated": True}
+
+
+def _payment_summary(
+    alumna_uuid: UUID, database_session: DBSession
+) -> AdminPaymentSummary:
+    """Payment state for one alumna, in one query to avoid N+1 on the listing.
+
+    Ordered by status before time: a settled payment takes its timestamp from the
+    gateway while a failed one keeps its creation time, so ordering on time alone
+    can hide a success behind a later failure.
+    """
+    payment = database_session.scalar(
+        select(Payment)
+        .join(AlumniPayment, col(AlumniPayment.payment_uuid) == col(Payment.uuid))
+        .where(col(AlumniPayment.alumna_uuid) == alumna_uuid)
+        .order_by(
+            # completed first, so a later failure cannot hide a success.
+            case((col(Payment.status) == "completed", 0), else_=1),
+            col(Payment.paid_at).desc(),
+        )
+        .limit(1)
+    )
+
+    if not payment:
+        return AdminPaymentSummary()
+
+    return AdminPaymentSummary(
+        has_paid=payment.status == "completed",
+        latest_status=payment.status,
+        amount=payment.amount,
+        transaction_reference=payment.transaction_reference,
+        paid_at=payment.paid_at,
+    )
 
 
 @router.get("/referrals", response_model=list[ReferralLeaderboardEntry])
@@ -105,6 +198,7 @@ def _full_information(alumna: Alumna, database_session: DBSession) -> AlumnaInfo
             student_id=profile.student_id,
             batch_year=profile.batch_year,
             tee_shirt_size=profile.tee_shirt_size,
+            academic_group=profile.academic_group,
             registered_at=profile.registered_at,
             work_profile=(
                 WorkProfileInformation.model_validate(work_profile, from_attributes=True)
@@ -130,12 +224,12 @@ def _full_information(alumna: Alumna, database_session: DBSession) -> AlumnaInfo
         status=alumna.status,
         created_at=alumna.created_at,
         profile=profile_information,
+        payment=_payment_summary(alumna.uuid, database_session),
         acquaintances=[
             AcquaintanceInformation.model_validate(a, from_attributes=True)
             for a in acquaintances
         ],
     )
-
 
 @router.get(
     "/alumnae",
@@ -143,7 +237,7 @@ def _full_information(alumna: Alumna, database_session: DBSession) -> AlumnaInfo
     summary="List registered alumnae, optionally filtered by account status",
 )
 def list_alumnae(
-    _: AdminSecret,
+    _: Admin,
     database_session: DBSession,
     status_filter: AccountStatus | None = Query(
         default=None, alias="status", description="pending | confirmed | cancelled"
@@ -166,9 +260,8 @@ def list_alumnae(
     "/alumnae/counts",
     summary="Count alumnae grouped by account status",
 )
-def count_alumnae(_: AdminSecret, database_session: DBSession) -> dict[str, int]:
-    # col() is required so SQLAlchemy treats this as a SQL expression rather
-    # than a model instance attribute.
+def count_alumnae(_: Admin, database_session: DBSession) -> dict[str, int]:
+    # col() so SQLAlchemy reads this as an expression, not an attribute.
     rows = database_session.execute(
         select(col(Alumna.status), func.count()).group_by(col(Alumna.status))
     ).all()
@@ -188,7 +281,7 @@ def count_alumnae(_: AdminSecret, database_session: DBSession) -> dict[str, int]
 def update_alumna_status(
     alumna_uuid: UUID,
     new_status: AccountStatus,
-    _: AdminSecret,
+    _: Admin,
     database_session: DBSession,
 ):
     alumna = database_session.get(Alumna, alumna_uuid)

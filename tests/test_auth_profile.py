@@ -57,8 +57,8 @@ def test_update_profile_does_not_allow_email_change(
     assert client.get("/auth/me").json()["email"] == "ayesha@example.com"
 
 
-def test_update_password_requires_authentication(client, confirmed_client):
-    response = client.put(
+def test_update_password_requires_authentication(anonymous_client):
+    response = anonymous_client.put(
         "/auth/update-password",
         json={"current_password": "secret123", "new_password": "newsecret1"},
     )

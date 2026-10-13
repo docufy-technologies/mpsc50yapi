@@ -65,3 +65,12 @@ def test_openapi_schema_is_generated(client):
     assert "/auth/register" in paths
     assert "/admin/alumnae" in paths
     assert "/public/event" in paths
+
+
+def test_event_fee_matches_the_configured_fee(client, monkeypatch):
+    """The advertised price must not drift from the charged one."""
+    from app import settings as settings_module
+
+    monkeypatch.setattr(settings_module.settings, "event_fee_bdt", 2500)
+
+    assert client.get("/public/event").json()["participation_fee_bdt"] == 2500

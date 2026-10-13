@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlmodel import func, select
 
 from app.database import DBSession
+from app.settings import settings
 from app.models import Alumna, AlumniProfile, EventDeadline
 from app.services.deadlines import deadline_is_open
 
@@ -44,13 +45,16 @@ EVENT_INFORMATION = EventInformation(
     registration_deadline="2026-11-10T23:59:59",
     event_date="2026-12-20",
     venue="Mohammadpur Preparatory School & College, Mohammadpur, Dhaka",
-    participation_fee_bdt=1500,
+    # Overridden per request from settings.event_fee_bdt, the amount charged.
+    participation_fee_bdt=0,
 )
 
 
 @router.get("/event", response_model=EventInformation, summary="Static event information")
 def get_event_information() -> EventInformation:
-    return EVENT_INFORMATION
+    return EVENT_INFORMATION.model_copy(
+        update={"participation_fee_bdt": settings.event_fee_bdt}
+    )
 
 
 @router.get(

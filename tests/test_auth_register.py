@@ -138,3 +138,37 @@ def test_generated_reg_codes_are_unique(client, registration_payload):
 def test_registered_uuid_is_a_uuid(client, registration_payload):
     body = client.post("/auth/register", json=registration_payload).json()
     assert uuid.UUID(body["uuid"])
+
+
+def test_register_issues_access_cookie(client, registration_payload):
+    """The event flow is register -> pay -> admin approval, so a pending
+    alumna must leave registration with a working session."""
+    response = client.post("/auth/register", json=registration_payload)
+    assert response.status_code == 201
+    assert client.cookies.get("mpsc_access_token")
+
+    # The cookie is usable straight away, without a separate login.
+    assert client.get("/auth/me").status_code == 200
+
+
+def test_register_cookie_is_httponly(client, registration_payload):
+    response = client.post("/auth/register", json=registration_payload)
+    header = response.headers["set-cookie"].lower()
+    assert "mpsc_access_token=" in header
+    assert "httponly" in header
+
+
+def test_register_accepts_academic_group(client, registration_payload):
+    payload = {**registration_payload, "academic_group": "science"}
+    body = client.post("/auth/register", json=payload).json()
+    assert body["profile"]["academic_group"] == "science"
+
+
+def test_register_defaults_academic_group_to_none(client, registration_payload):
+    body = client.post("/auth/register", json=registration_payload).json()
+    assert body["profile"]["academic_group"] is None
+
+
+def test_register_rejects_unknown_academic_group(client, registration_payload):
+    payload = {**registration_payload, "academic_group": "underwater-basketweaving"}
+    assert client.post("/auth/register", json=payload).status_code == 422

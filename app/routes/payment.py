@@ -89,8 +89,7 @@ def _settle_payment(
 async def _reconcile(
     database_session: DBSession, transaction_reference: str
 ) -> tuple[Payment, ValidationOutcome]:
-    """Look up the payment and verify it against the gateway. Shared by the
-    browser callback and the IPN webhook so both apply identical rules."""
+    """Verify a payment against the gateway. Shared by callback and IPN."""
     payment = database_session.scalar(
         select(Payment).where(Payment.transaction_reference == transaction_reference)
     )
@@ -131,11 +130,8 @@ async def initiate_payment(
             detail="Payment for this alumna is already completed",
         )
 
-    # Re-use an abandoned session instead of piling up duplicate rows. A payment
-    # that is still `unpaid` has never settled, so its gateway session is dead
-    # and reusing the reference is safe.
-    # Only `unpaid` is reusable. A `failed` payment has a reference the gateway
-    # may still hold records for, so a retry gets a fresh one.
+    # Only `unpaid` is reusable. A `failed` payment may still have gateway
+    # records, so a retry gets a fresh reference.
     reusable = next(
         (payment for payment in existing_payments if payment.status == "unpaid"),
         None,
@@ -166,8 +162,7 @@ async def initiate_payment(
         product_name="MPSC 50 Years Golden Jubilee Participation",
         alumna_email=alumna.email,
         alumna_name=alumna.full_name,
-        # The browser lands on the API so the transaction is validated before the
-        # alumna ever sees a success page. The endpoint then redirects onward.
+        # The browser lands on the API so it is validated before success is shown.
         success_url=f"{settings.api_url}/payments/callback",
         cancel_url=f"{settings.frontend_url}/payment/cancelled",
         ipn_url=f"{settings.api_url}/payments/ipn",

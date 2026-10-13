@@ -3,62 +3,8 @@ import json
 import pytest
 
 from app import models  # noqa: F401
-from app.routes import payment as payment_routes
 from app.services import sslcommerz
-from app.services.sslcommerz import PaymentSession
 from app.settings import settings
-
-
-@pytest.fixture
-def fake_gateway(monkeypatch):
-    """Replaces the SSLCommerz HTTP calls so the flow can be tested offline."""
-    state: dict = {
-        "validation": {
-            "status": "VALID",
-            "tran_id": "",
-            "amount": "1500.00",
-            "currency": "BDT",
-            "validation_date": "2026-10-12T10:00:00",
-        },
-        "session_calls": [],
-        "validation_calls": [],
-    }
-
-    async def fake_create(**kwargs):
-        state["session_calls"].append(kwargs)
-        return PaymentSession(
-            gateway_url="https://sandbox.sslcommerz.com/EasyCheckOut/test",
-            session_key=f"SESSION-{kwargs['transaction_reference']}",
-        )
-
-    async def fake_validate(transaction_reference):
-        state["validation_calls"].append(transaction_reference)
-        payload = dict(state["validation"])
-        payload.setdefault("tran_id", transaction_reference)
-        if not payload.get("tran_id"):
-            payload["tran_id"] = transaction_reference
-        return payload
-
-    monkeypatch.setattr(payment_routes, "create_payment_session", fake_create)
-    monkeypatch.setattr(payment_routes, "validate_transaction", fake_validate)
-    monkeypatch.setattr(
-        sslcommerz,
-        "create_payment_session",
-        fake_create,
-        raising=False,
-    )
-    return state
-
-
-@pytest.fixture
-def gateway_configured(monkeypatch):
-    from app import settings as settings_module
-
-    monkeypatch.setattr(settings_module.settings, "sslcommerz_store_id", "store123")
-    monkeypatch.setattr(
-        settings_module.settings, "sslcommerz_store_password", "pass123"
-    )
-    return True
 
 
 def test_initiate_requires_authentication(client, gateway_configured, fake_gateway):
@@ -606,3 +552,35 @@ def test_initiate_is_blocked_after_a_completed_payment(
 
     response = client.post("/payments/initiate")
     assert response.status_code == 409
+
+def test_pending_alumna_can_initiate_payment(
+    client, registration_payload, gateway_configured, fake_gateway
+):
+    """Regression guard for the flow inversion.
+
+    The event flow is register -> pay -> admin approval. Payment used to sit
+    behind a confirmed-account check, so a registrant who had just signed up
+    and not yet been approved got a 404 on their first attempt to pay.
+    """
+    client.post("/auth/register", json=registration_payload)
+
+    response = client.post("/payments/initiate")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["gateway_url"]
+    assert body["transaction_reference"]
+
+
+def test_cancelled_alumna_cannot_initiate_payment(
+    client, registration_payload, gateway_configured, fake_gateway, admin_headers
+):
+    """Cancelling must revoke payment access, not just block login."""
+    body = client.post("/auth/register", json=registration_payload).json()
+    client.patch(
+        f"/admin/alumnae/{body['uuid']}/status",
+        params={"new_status": "cancelled"},
+        headers=admin_headers,
+    )
+
+    assert client.post("/payments/initiate").status_code == 404

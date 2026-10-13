@@ -7,6 +7,8 @@ from app.helper import now
 from app.settings import settings
 
 ACCESS_TOKEN_TTL_SECONDS: int = 60 * 60 * 24
+# Admins approve and leave; they do not browse. Shorter than an alumna session.
+ADMIN_TOKEN_TTL_SECONDS: int = 60 * 60 * 8
 # Grace period after expiry during which /auth/refresh-token still accepts a token.
 REFRESH_WINDOW_SECONDS: int = 60 * 60 * 24 * 7
 

@@ -65,6 +65,7 @@ def _alumna_information(alumna: Alumna, database_session: Session) -> AlumnaInfo
             student_id=profile.student_id,
             batch_year=profile.batch_year,
             tee_shirt_size=profile.tee_shirt_size,
+            academic_group=profile.academic_group,
             registered_at=profile.registered_at,
             work_profile=work_profile_information,
             address=address_information,
@@ -95,7 +96,11 @@ def _alumna_information(alumna: Alumna, database_session: Session) -> AlumnaInfo
     "/register",
     status_code=status.HTTP_201_CREATED,
     response_model=AlumnaInformation,
-    summary="Register a new alumna with profile, work profile, address and acquaintances",
+    summary=(
+        "Register a new alumna and issue an access token. "
+        "The response carries the same body as /auth/login so the client can go "
+        "straight to POST /payments/initiate."
+    ),
 )
 def register(data: AlumnaRegister, database_session: DBSession):
     email = data.email.lower()
@@ -166,6 +171,7 @@ def register(data: AlumnaRegister, database_session: DBSession):
         student_id=data.student_id,
         batch_year=data.batch_year,
         tee_shirt_size=data.tee_shirt_size,
+        academic_group=data.academic_group,
         referred_by_alumna_uuid=referrer.alumna_uuid if referrer else None,
         work_profile_uuid=work_profile.uuid if work_profile else None,
         address_uuid=address.uuid if address else None,
@@ -180,7 +186,19 @@ def register(data: AlumnaRegister, database_session: DBSession):
     database_session.commit()
     database_session.refresh(alumna)
 
-    return _alumna_information(alumna, database_session)
+    # Registration sets the cookie too: the flow is register -> pay -> approval,
+    # so a pending alumna must be able to reach /payments/initiate without logging in.
+    access_token = encode_access_token({"uuid": str(alumna.uuid)})
+    response_data = _alumna_information(alumna, database_session)
+
+    response = JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content=response_data.model_dump(mode="json"),
+    )
+    response.set_cookie(
+        **settings.access_token_config(access_token, ACCESS_TOKEN_TTL_SECONDS)
+    )
+    return response
 
 
 @router.post(
@@ -196,7 +214,8 @@ def login(cred: AlumnaLogin, database_session: DBSession):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )
-    if alumna.status != "confirmed":
+    # Only `cancelled` is refused; a `pending` alumna has paid but is unapproved.
+    if alumna.status == "cancelled":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is not active",
@@ -221,7 +240,7 @@ def logout():
         status_code=status.HTTP_200_OK, content={"message": "Logged out successfully"}
     )
     response.delete_cookie(
-        settings.access_token_name, **settings.delete_access_token_config()
+        **settings.delete_cookie_config(settings.access_token_name)
     )
     return response
 
@@ -254,7 +273,7 @@ def refresh_access_token(request: Request, database_session: DBSession):
 
         alumna = database_session.scalar(
             select(Alumna).where(
-                Alumna.uuid == UUID(uuid_str), Alumna.status == "confirmed"
+                Alumna.uuid == UUID(uuid_str), Alumna.status != "cancelled"
             )
         )
         if not alumna:
@@ -295,11 +314,11 @@ def verify_token(request: Request, database_session: DBSession) -> dict[str, Any
                 detail="Invalid token payload",
             )
 
-        # A signature-valid token is not enough: the account must still exist
-        # and be active, otherwise a cancelled/deleted alumna stays "validated".
+        # A valid signature is not enough: the account must still exist and not
+        # be cancelled, or a dead alumna stays "validated".
         alumna = database_session.scalar(
             select(Alumna).where(
-                Alumna.uuid == UUID(uuid_str), Alumna.status == "confirmed"
+                Alumna.uuid == UUID(uuid_str), Alumna.status != "cancelled"
             )
         )
         if not alumna:

@@ -3,7 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
-from app.types import AgeGroup, TeeShirtSize
+from app.schemas.payment import AdminPaymentSummary
+from app.types import AcademicGroup, AgeGroup, TeeShirtSize
 
 
 class WorkProfileCreate(BaseModel):
@@ -55,6 +56,7 @@ class AlumniProfileInformation(BaseModel):
     student_id: str | None
     batch_year: int
     tee_shirt_size: str
+    academic_group: str | None = None
     registered_at: datetime
     work_profile: WorkProfileInformation | None = None
     address: AddressInformation | None = None
@@ -68,6 +70,8 @@ class AlumnaInformation(BaseModel):
     status: str
     created_at: datetime
     profile: AlumniProfileInformation | None = None
+    # Only populated by the admin projection; alumna routes leave it empty.
+    payment: AdminPaymentSummary = Field(default_factory=AdminPaymentSummary)
     acquaintances: list[AcquaintanceInformation] = Field(default_factory=list)
 
 
@@ -79,6 +83,7 @@ class AlumnaRegister(BaseModel):
 
     batch_year: int = Field(ge=1976, le=datetime.now(tz=UTC).year)
     tee_shirt_size: TeeShirtSize
+    academic_group: AcademicGroup | None = None
     student_id: str | None = None
     reg_code: str | None = None
     referrer: str | None = Field(default=None, min_length=1, max_length=64)
