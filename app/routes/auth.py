@@ -23,7 +23,7 @@ from app.schemas.alumni import (
     UpdateProfileRequest,
     WorkProfileInformation,
 )
-from app.schemas.authentication import AlumLogin, PasswordUpdate, Token
+from app.schemas.auth import AlumLogin, PasswordUpdate, Token
 from app.services.auth import hash_password, verify_password
 from app.services.token import (
     ACCESS_TOKEN_TTL_SECONDS,
