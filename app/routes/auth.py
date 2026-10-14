@@ -126,7 +126,7 @@ def register(data: AlumRegister, database_session: DBSession):
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Referrer registration code not found",
             )
-        if not referrer.alum_uuid or not database_session.get(Alum, referrer.alum_uuid):
+        if not database_session.get(Alum, referrer.alum_uuid):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Referrer registration code is not linked to an alum",

@@ -141,7 +141,7 @@ def referral_leaderboard(
     _: CurrentAdmin, database_session: DBSession
 ) -> list[ReferralLeaderboardEntry]:
     profiles = database_session.scalars(
-        select(AlumniProfile).where(col(AlumniProfile.alum_uuid).is_not(None))
+        select(AlumniProfile)
     ).all()
     entries = []
     for profile in profiles:

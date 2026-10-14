@@ -153,8 +153,8 @@ class AlumniProfile(SQLModel, table=True):
     __tablename__ = "alumni_profiles"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alum_uuid: UUID | None = Field(
-        default=None, foreign_key="alumni.uuid", unique=True, ondelete="CASCADE"
+    alum_uuid: UUID = Field(
+        foreign_key="alumni.uuid", unique=True, ondelete="CASCADE"
     )
     reg_code: str | None = Field(default=None, unique=True)
     student_id: str | None = Field(default=None)
