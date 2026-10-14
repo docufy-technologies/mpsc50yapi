@@ -1,10 +1,16 @@
 from typing import Any
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     database_uri: str = Field(..., validation_alias="DATABASE_URI")
     jwt_private_key: str = Field(..., validation_alias="JWT_SECRET_KEY")
     jwt_public_key: str = Field(..., validation_alias="JWT_PUBLIC_KEY")

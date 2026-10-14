@@ -23,7 +23,7 @@ from app.schemas.alumni import (
     AlumniProfileInformation,
     WorkProfileInformation,
 )
-from app.schemas.authentication import AdminInfo, AdminLogin, AdminSession
+from app.schemas.auth import AdminInfo, AdminLogin, AdminSession
 from app.schemas.payment import AdminPaymentSummary
 from app.schemas.referrals import ReferralDrillDown, ReferralLeaderboardEntry
 from app.services.admin import encode_admin_token

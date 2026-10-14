@@ -158,7 +158,7 @@ def register(data: AlumRegister, database_session: DBSession):
     database_session.flush()
 
     work_profile: WorkProfile | None = None
-    if data.work_profile:
+    if data.work_profile and not data.work_profile.is_empty():
         work_profile = WorkProfile(**data.work_profile.model_dump())
         database_session.add(work_profile)
 

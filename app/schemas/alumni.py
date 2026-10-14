@@ -1,16 +1,43 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.schemas.payment import AdminPaymentSummary
 from app.types import AcademicGroup, AgeGroup, TeeShirtSize
 
 
 class WorkProfileCreate(BaseModel):
-    organization_name: str
-    designation: str
-    department_or_division: str
+    organization_name: str | None = None
+    designation: str | None = None
+    department_or_division: str | None = None
+
+    @model_validator(mode="after")
+    def validate_all_or_none(self) -> "WorkProfileCreate":
+        fields = [
+            self.organization_name,
+            self.designation,
+            self.department_or_division,
+        ]
+        has_any = any(f is not None and f.strip() != "" for f in fields)
+        has_all = all(f is not None and f.strip() != "" for f in fields)
+
+        if has_any and not has_all:
+            raise ValueError(
+                "If any work profile field (organization name, designation, department) "
+                "is provided, all 3 fields must be filled."
+            )
+        return self
+
+    def is_empty(self) -> bool:
+        return not any(
+            f is not None and f.strip() != ""
+            for f in [
+                self.organization_name,
+                self.designation,
+                self.department_or_division,
+            ]
+        )
 
 
 class WorkProfileInformation(BaseModel):
