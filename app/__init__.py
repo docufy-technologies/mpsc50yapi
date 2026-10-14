@@ -18,8 +18,8 @@ Backend for the MPSC 50 Years Golden Jubilee celebration.
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    from app import models  # type:ignore  # noqa: F401
     from app.database import engine
-    from app.models import *  # noqa #type:ignore
 
     SQLModel.metadata.create_all(engine)
     yield

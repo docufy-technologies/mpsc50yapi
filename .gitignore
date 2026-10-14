@@ -193,3 +193,4 @@ tmp*
 *.db*
 alembic/
 alembic*
+requirements.txt
