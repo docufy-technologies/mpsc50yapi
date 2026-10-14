@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 
 def now() -> datetime:
@@ -9,7 +9,8 @@ def now() -> datetime:
 
 
 def generate_reg_code(session: Session) -> str:
-    """Generate a 12-char hex registration code, guaranteed unique in the DB."""
+    from sqlmodel import select
+
     from app.models import AlumniProfile
 
     while True:
