@@ -6,7 +6,6 @@ from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 
 from app.dependencies import CurrentAlum, DBSession
-from app.helper import generate_reg_code
 from app.models import (
     Acquaintance,
     Address,
@@ -115,22 +114,8 @@ def register(data: AlumRegister, database_session: DBSession):
             detail="This email is already registered",
         )
 
-    reg_code = data.reg_code or generate_reg_code()
-    if database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.reg_code == reg_code)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This registration code is already in use",
-        )
-
     referrer = None
     if data.referrer_reg_code:
-        if data.referrer_reg_code == reg_code:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="An alum cannot refer herself",
-            )
         referrer = database_session.scalar(
             select(AlumniProfile).where(
                 AlumniProfile.reg_code == data.referrer_reg_code
@@ -163,7 +148,7 @@ def register(data: AlumRegister, database_session: DBSession):
         database_session.add(work_profile)
 
     address: Address | None = None
-    if data.address:
+    if data.address and not data.address.is_empty():
         address = Address(**data.address.model_dump())
         database_session.add(address)
 
@@ -172,7 +157,6 @@ def register(data: AlumRegister, database_session: DBSession):
 
     profile = AlumniProfile(
         alum_uuid=alum.uuid,
-        reg_code=reg_code,
         student_id=data.student_id,
         batch_year=data.batch_year,
         tee_shirt_size=data.tee_shirt_size,
