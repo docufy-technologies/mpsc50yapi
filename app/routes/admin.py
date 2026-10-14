@@ -218,6 +218,7 @@ def _full_information(alum: Alum, database_session: DBSession) -> AlumInformatio
             student_id=profile.student_id,
             batch_year=profile.batch_year,
             tee_shirt_size=profile.tee_shirt_size,
+            gender=profile.gender,
             academic_group=profile.academic_group,
             registered_at=profile.registered_at,
             work_profile=(

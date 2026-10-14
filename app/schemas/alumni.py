@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.schemas.payment import AdminPaymentSummary
-from app.types import AcademicGroup, AgeGroup, TeeShirtSize
+from app.types import AcademicGroup, AgeGroup, Gender, TeeShirtSize
 
 
 class WorkProfileCreate(BaseModel):
@@ -114,6 +114,7 @@ class AlumniProfileInformation(BaseModel):
     student_id: str | None
     batch_year: int
     tee_shirt_size: str
+    gender: str
     academic_group: str | None = None
     registered_at: datetime
     work_profile: WorkProfileInformation | None = None
@@ -141,6 +142,7 @@ class AlumRegister(BaseModel):
 
     batch_year: int = Field(ge=1976, le=datetime.now(tz=UTC).year)
     tee_shirt_size: TeeShirtSize
+    gender: Gender
     academic_group: AcademicGroup | None = None
     student_id: str | None = None
     referrer_reg_code: str | None = Field(default=None, min_length=1, max_length=64)

@@ -163,6 +163,7 @@ class AlumniProfile(SQLModel, table=True):
     )
     batch_year: int
     tee_shirt_size: str
+    gender: str
     # Constrained to AcademicGroup in the schema, not at the column.
     academic_group: str | None = Field(default=None)
 
