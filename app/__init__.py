@@ -4,8 +4,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import SQLModel
 
-from app import models  # noqa: F401  (registers all tables)
-from app.database import engine
 from app.routes import admin, auth, involve, payment, public
 
 DESCRIPTION = """
@@ -20,7 +18,10 @@ Backend for the MPSC 50 Years Golden Jubilee celebration.
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    SQLModel.metadata.create_all(bind=engine)
+    from app import models  # type:ignore  # noqa: F401
+    from app.database import engine
+
+    SQLModel.metadata.create_all(engine)
     yield
 
 

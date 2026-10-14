@@ -1,40 +1,13 @@
-from datetime import datetime
-
 from fastapi import APIRouter
-from pydantic import BaseModel
 from sqlmodel import func, select
 
 from app.dependencies import DBSession
 from app.models import Alum, AlumniProfile, EventDeadline
+from app.schemas.public import EventInformation, PublicDeadline, PublicStatistics
 from app.services.deadlines import deadline_is_open
 from app.settings import settings
 
 router = APIRouter(prefix="/public", tags=["Public Routes"])
-
-
-class EventInformation(BaseModel):
-    name: str
-    subtitle: str
-    established_year: int
-    celebration_year: int
-    registration_deadline: str
-    event_date: str
-    venue: str
-    participation_fee_bdt: int
-
-
-class PublicStatistics(BaseModel):
-    confirmed_alumni: int
-    total_registrations: int
-    batch_years_covered: int
-
-
-class PublicDeadline(BaseModel):
-    key: str
-    label: str
-    deadline_at: datetime
-    is_extended: bool
-    is_open: bool
 
 
 EVENT_INFORMATION = EventInformation(

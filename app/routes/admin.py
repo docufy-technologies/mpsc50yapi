@@ -23,11 +23,11 @@ from app.schemas.alumni import (
     AlumniProfileInformation,
     WorkProfileInformation,
 )
-from app.schemas.authentication import AdminInfo, AdminLogin, AdminSession
+from app.schemas.auth import AdminInfo, AdminLogin, AdminSession
 from app.schemas.payment import AdminPaymentSummary
 from app.schemas.referrals import ReferralDrillDown, ReferralLeaderboardEntry
-from app.services.administration import encode_admin_token
-from app.services.authentication import verify_password
+from app.services.admin import encode_admin_token
+from app.services.auth import verify_password
 from app.services.referral_queries import referrals_for
 from app.services.token import ADMIN_TOKEN_TTL_SECONDS
 from app.settings import settings
@@ -141,7 +141,7 @@ def referral_leaderboard(
     _: CurrentAdmin, database_session: DBSession
 ) -> list[ReferralLeaderboardEntry]:
     profiles = database_session.scalars(
-        select(AlumniProfile).where(col(AlumniProfile.alum_uuid).is_not(None))
+        select(AlumniProfile)
     ).all()
     entries = []
     for profile in profiles:

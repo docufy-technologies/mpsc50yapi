@@ -8,8 +8,8 @@ from fastapi.responses import RedirectResponse
 from sqlmodel import col, select
 
 from app.dependencies import CurrentAlum, DBSession
-from app.helper import now
-from app.models import AlumniPayment, Payment
+from app.helper import generate_reg_code, now
+from app.models import AlumniPayment, AlumniProfile, Payment
 from app.schemas.payment import PaymentInformation, PaymentSessionResponse
 from app.services.sslcommerz import (
     ValidationOutcome,
@@ -71,13 +71,33 @@ def _settle_payment(
     payment: Payment,
     outcome: ValidationOutcome,
 ) -> Payment:
-    """Apply a reconciliation outcome to the payment row."""
+    """Apply a reconciliation outcome to the payment row.
+
+    When the payment is valid, a unique ``reg_code`` is assigned to the
+    alum's profile (if not already set).  The code is only generated once
+    payment clears so that every ``reg_code`` in the system represents a
+    paid registration.
+    """
     payment.status = "completed" if outcome.is_valid else "failed"
 
     if outcome.is_valid:
         paid_at = _parse_gateway_timestamp(outcome.raw)
         if paid_at:
             payment.paid_at = paid_at
+
+        # Assign reg_code to the alum whose payment just cleared.
+        link = database_session.scalar(
+            select(AlumniPayment).where(AlumniPayment.payment_uuid == payment.uuid)
+        )
+        if link and link.alum_uuid:
+            profile = database_session.scalar(
+                select(AlumniProfile).where(
+                    AlumniProfile.alum_uuid == link.alum_uuid
+                )
+            )
+            if profile and not profile.reg_code:
+                profile.reg_code = generate_reg_code(database_session)
+                database_session.add(profile)
 
     database_session.add(payment)
     database_session.commit()

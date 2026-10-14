@@ -6,7 +6,6 @@ from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 
 from app.dependencies import CurrentAlum, DBSession
-from app.helper import generate_reg_code
 from app.models import (
     Acquaintance,
     Address,
@@ -18,13 +17,13 @@ from app.schemas.alumni import (
     AcquaintanceInformation,
     AddressInformation,
     AlumInformation,
-    AlumRegister,
     AlumniProfileInformation,
+    AlumRegister,
     UpdateProfileRequest,
     WorkProfileInformation,
 )
-from app.schemas.authentication import AlumLogin, PasswordUpdate, Token
-from app.services.authentication import hash_password, verify_password
+from app.schemas.auth import AlumLogin, PasswordUpdate, Token
+from app.services.auth import hash_password, verify_password
 from app.services.token import (
     ACCESS_TOKEN_TTL_SECONDS,
     decode_token,
@@ -37,39 +36,46 @@ router = APIRouter(prefix="/auth", tags=["Authentication Routes"])
 
 
 def _alum_information(alum: Alum, database_session: Session) -> AlumInformation:
+
     profile = database_session.scalar(
         select(AlumniProfile).where(AlumniProfile.alum_uuid == alum.uuid)
     )
 
+    assert profile is not None
+    # reasoning[rakibulhasanratul]: According to the current design,
+    # Alum is the bare minimum login entity & AlumniProfile holds the
+    # extended information about an Alum. So, it is obvious that we
+    # shall find a profile each alum
+
     profile_information = None
-    if profile:
-        work_profile_information = None
-        if profile.work_profile_uuid:
-            work_profile = database_session.get(WorkProfile, profile.work_profile_uuid)
-            if work_profile:
-                work_profile_information = WorkProfileInformation.model_validate(
-                    work_profile, from_attributes=True
-                )
 
-        address_information = None
-        if profile.address_uuid:
-            address = database_session.get(Address, profile.address_uuid)
-            if address:
-                address_information = AddressInformation.model_validate(
-                    address, from_attributes=True
-                )
+    work_profile_information = None
+    if profile.work_profile_uuid:
+        work_profile = database_session.get(WorkProfile, profile.work_profile_uuid)
+        if work_profile:
+            work_profile_information = WorkProfileInformation.model_validate(
+                work_profile, from_attributes=True
+            )
 
-        profile_information = AlumniProfileInformation(
-            uuid=profile.uuid,
-            reg_code=profile.reg_code,
-            student_id=profile.student_id,
-            batch_year=profile.batch_year,
-            tee_shirt_size=profile.tee_shirt_size,
-            academic_group=profile.academic_group,
-            registered_at=profile.registered_at,
-            work_profile=work_profile_information,
-            address=address_information,
-        )
+    address_information = None
+    if profile.address_uuid:
+        address = database_session.get(Address, profile.address_uuid)
+        if address:
+            address_information = AddressInformation.model_validate(
+                address, from_attributes=True
+            )
+
+    profile_information = AlumniProfileInformation(
+        uuid=profile.uuid,
+        reg_code=profile.reg_code,
+        student_id=profile.student_id,
+        batch_year=profile.batch_year,
+        tee_shirt_size=profile.tee_shirt_size,
+        academic_group=profile.academic_group,
+        registered_at=profile.registered_at,
+        work_profile=work_profile_information,
+        address=address_information,
+    )
 
     acquaintances = database_session.scalars(
         select(Acquaintance).where(Acquaintance.alum_uuid == alum.uuid)
@@ -84,9 +90,7 @@ def _alum_information(alum: Alum, database_session: Session) -> AlumInformation:
         created_at=alum.created_at,
         profile=profile_information,
         acquaintances=[
-            AcquaintanceInformation.model_validate(
-                acquaintance, from_attributes=True
-            )
+            AcquaintanceInformation.model_validate(acquaintance, from_attributes=True)
             for acquaintance in acquaintances
         ],
     )
@@ -110,33 +114,19 @@ def register(data: AlumRegister, database_session: DBSession):
             detail="This email is already registered",
         )
 
-    reg_code = data.reg_code or generate_reg_code()
-    if database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.reg_code == reg_code)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This registration code is already in use",
-        )
-
     referrer = None
-    if data.referrer:
-        if data.referrer == reg_code:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="An alum cannot refer herself",
-            )
+    if data.referrer_reg_code:
         referrer = database_session.scalar(
-            select(AlumniProfile).where(AlumniProfile.reg_code == data.referrer)
+            select(AlumniProfile).where(
+                AlumniProfile.reg_code == data.referrer_reg_code
+            )
         )
         if not referrer:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Referrer registration code not found",
             )
-        if not referrer.alum_uuid or not database_session.get(
-            Alum, referrer.alum_uuid
-        ):
+        if not database_session.get(Alum, referrer.alum_uuid):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Referrer registration code is not linked to an alum",
@@ -153,12 +143,12 @@ def register(data: AlumRegister, database_session: DBSession):
     database_session.flush()
 
     work_profile: WorkProfile | None = None
-    if data.work_profile:
+    if data.work_profile and not data.work_profile.is_empty():
         work_profile = WorkProfile(**data.work_profile.model_dump())
         database_session.add(work_profile)
 
     address: Address | None = None
-    if data.address:
+    if data.address and not data.address.is_empty():
         address = Address(**data.address.model_dump())
         database_session.add(address)
 
@@ -167,7 +157,6 @@ def register(data: AlumRegister, database_session: DBSession):
 
     profile = AlumniProfile(
         alum_uuid=alum.uuid,
-        reg_code=reg_code,
         student_id=data.student_id,
         batch_year=data.batch_year,
         tee_shirt_size=data.tee_shirt_size,
@@ -207,9 +196,7 @@ def register(data: AlumRegister, database_session: DBSession):
     summary="Authenticate an alum and issue an access token",
 )
 def login(cred: AlumLogin, database_session: DBSession):
-    alum = database_session.scalar(
-        select(Alum).where(Alum.email == cred.email.lower())
-    )
+    alum = database_session.scalar(select(Alum).where(Alum.email == cred.email.lower()))
     if not alum or not verify_password(cred.password, alum.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
@@ -239,9 +226,7 @@ def logout():
     response = JSONResponse(
         status_code=status.HTTP_200_OK, content={"message": "Logged out successfully"}
     )
-    response.delete_cookie(
-        **settings.delete_cookie_config(settings.access_token_name)
-    )
+    response.delete_cookie(**settings.delete_cookie_config(settings.access_token_name))
     return response
 
 
@@ -272,9 +257,7 @@ def refresh_access_token(request: Request, database_session: DBSession):
             )
 
         alum = database_session.scalar(
-            select(Alum).where(
-                Alum.uuid == UUID(uuid_str), Alum.status != "cancelled"
-            )
+            select(Alum).where(Alum.uuid == UUID(uuid_str), Alum.status != "cancelled")
         )
         if not alum:
             raise HTTPException(
@@ -317,9 +300,7 @@ def verify_token(request: Request, database_session: DBSession) -> dict[str, Any
         # A valid signature is not enough: the account must still exist and not
         # be cancelled, or a dead alum stays "validated".
         alum = database_session.scalar(
-            select(Alum).where(
-                Alum.uuid == UUID(uuid_str), Alum.status != "cancelled"
-            )
+            select(Alum).where(Alum.uuid == UUID(uuid_str), Alum.status != "cancelled")
         )
         if not alum:
             raise HTTPException(
@@ -367,9 +348,7 @@ def update_alum_profile(
     return _alum_information(alum, database_session)
 
 
-@router.put(
-    "/update-password", summary="Update the current alum's password"
-)
+@router.put("/update-password", summary="Update the current alum's password")
 def update_alum_password(
     cred: PasswordUpdate,
     alum: CurrentAlum,

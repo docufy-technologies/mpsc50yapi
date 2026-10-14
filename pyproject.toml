@@ -13,6 +13,7 @@ dependencies = [
     "pydantic[email]>=2.11.2",
     "pyjwt>=2.10.1",
     "python-dotenv>=1.1.0",
+    "sqlcipher3-binary>=0.6.0",
     "sqlmodel>=0.0.24",
 ]
 
