@@ -1,10 +1,3 @@
-"""Minimal SSLCommerz session integration.
-
-Only the two calls the event flow needs are implemented: creating a payment
-session (redirect the alum to the gateway) and validating the gateway's
-callback/IPN so a payment can be marked completed.
-"""
-
 from dataclasses import dataclass
 from typing import Any
 
@@ -47,14 +40,6 @@ async def create_payment_session(
     cancel_url: str,
     ipn_url: str,
 ) -> PaymentSession:
-    """Create a checkout session.
-
-    success_url and ipn_url must both point at the backend. success_url is where
-    the browser lands after payment, which is where we run the server-side
-    validation before redirecting to the frontend; ipn_url is the gateway's
-    server-to-server notification. Pointing either at the frontend would mean no
-    validation ever runs.
-    """
     store_id, store_password = _require_credentials()
 
     payload = {
@@ -102,12 +87,13 @@ async def create_payment_session(
             detail=data.get("failedreason", "Payment session could not be created"),
         )
 
-    return PaymentSession(gateway_url=data["GatewayPageURL"], session_key=data["sessionkey"])
+    return PaymentSession(
+        gateway_url=data["GatewayPageURL"], session_key=data["sessionkey"]
+    )
 
 
 async def validate_transaction(transaction_reference: str) -> dict[str, Any]:
-    """Server-to-server transaction validation. Never trust the browser redirect
-    alone - a user can hit the success URL without paying."""
+
     store_id, store_password = _require_credentials()
 
     try:
@@ -132,8 +118,6 @@ async def validate_transaction(transaction_reference: str) -> dict[str, Any]:
 
 @dataclass
 class ValidationOutcome:
-    """Result of checking a gateway validation payload against our records."""
-
     is_valid: bool
     reason: str
     raw: dict[str, Any]
@@ -148,19 +132,15 @@ def reconcile_validation(
     expected_amount: int,
     expected_currency: str = "BDT",
 ) -> ValidationOutcome:
-    """Decide whether a gateway validation legitimately settles a payment.
 
-    Checking `status == "VALID"` alone is not enough. The gateway response must
-    also match the transaction we created, and crucially the amount and currency
-    must equal what we asked for - otherwise a user could pay 1 BDT and have it
-    accepted as the full fee.
-    """
     raw = validation.get("status", "")
     gateway_status = str(raw).upper()
 
     if gateway_status != "VALID":
         return ValidationOutcome(
-            is_valid=False, reason=f"gateway status is {gateway_status or 'missing'}", raw=validation
+            is_valid=False,
+            reason=f"gateway status is {gateway_status or 'missing'}",
+            raw=validation,
         )
 
     returned_reference = str(validation.get("tran_id", ""))
@@ -217,12 +197,3 @@ def reconcile_validation(
         validated_amount=validated_amount,
         validated_currency=currency,
     )
-
-
-__all__ = [
-    "PaymentSession",
-    "ValidationOutcome",
-    "create_payment_session",
-    "reconcile_validation",
-    "validate_transaction",
-]
