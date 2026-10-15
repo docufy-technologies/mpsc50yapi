@@ -4,7 +4,7 @@ type AccountStatus = Literal["pending", "confirmed", "cancelled"]
 type PaymentStatus = Literal["unpaid", "completed", "refunded", "failed", "cancelled"]
 type TeeShirtSize = Literal["XS", "S", "M", "L", "XL", "XXL", "XXXL"]
 type AcademicGroup = Literal["science", "humanities", "business_studies"]
-type Gender = Literal["male", "female", "other"]
+type Gender = Literal["male", "female"]
 type AgeGroup = Literal["adult", "child"]
 type SubmissionStatus = Literal[
     "submitted", "under_review", "approved", "rejected", "contacted"
