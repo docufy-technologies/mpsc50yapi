@@ -8,7 +8,6 @@ from sqlmodel import case, col, func, select
 from app.dependencies import CurrentAdmin, DBSession
 from app.models import (
     Acquaintance,
-    Address,
     Admin,
     Alum,
     AlumniPayment,
@@ -140,15 +139,14 @@ def _payment_summary(
 def referral_leaderboard(
     _: CurrentAdmin, database_session: DBSession
 ) -> list[ReferralLeaderboardEntry]:
-    profiles = database_session.scalars(
-        select(AlumniProfile)
-    ).all()
+    profiles = database_session.scalars(select(AlumniProfile)).all()
     entries = []
     for profile in profiles:
         alum = database_session.get(Alum, profile.alum_uuid)
         if not alum:
             continue
         _referrals, dates = referrals_for(database_session, alum.uuid)
+        assert profile.reg_code is not None, "AlumniProfile.reg_code should not be None"
         entries.append(
             ReferralLeaderboardEntry(
                 alum_uuid=alum.uuid,
@@ -183,6 +181,7 @@ def referral_drilldown(
     if not alum or not profile:
         raise HTTPException(status_code=404, detail="Alum not found")
     referrals, dates = referrals_for(database_session, alum_uuid)
+    assert profile.reg_code is not None, "AlumniProfile.reg_code should not be None"
     return ReferralDrillDown(
         alum_uuid=alum.uuid,
         full_name=alum.full_name,
@@ -206,11 +205,6 @@ def _full_information(alum: Alum, database_session: DBSession) -> AlumInformatio
             if profile.work_profile_uuid
             else None
         )
-        address = (
-            database_session.get(Address, profile.address_uuid)
-            if profile.address_uuid
-            else None
-        )
 
         profile_information = AlumniProfileInformation(
             uuid=profile.uuid,
@@ -218,6 +212,7 @@ def _full_information(alum: Alum, database_session: DBSession) -> AlumInformatio
             student_id=profile.student_id,
             batch_year=profile.batch_year,
             tee_shirt_size=profile.tee_shirt_size,
+            gender=profile.gender,
             academic_group=profile.academic_group,
             registered_at=profile.registered_at,
             work_profile=(
@@ -227,11 +222,7 @@ def _full_information(alum: Alum, database_session: DBSession) -> AlumInformatio
                 if work_profile
                 else None
             ),
-            address=(
-                AddressInformation.model_validate(address, from_attributes=True)
-                if address
-                else None
-            ),
+            address=AddressInformation.model_validate(profile, from_attributes=True),
         )
 
     acquaintances = database_session.scalars(

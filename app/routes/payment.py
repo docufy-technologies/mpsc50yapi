@@ -21,9 +21,6 @@ from app.settings import settings
 
 router = APIRouter(prefix="/payments", tags=["Payment Routes"])
 
-# States that are not settled. Used by the admin listing.
-OPEN_STATUSES = ("unpaid", "failed")
-
 
 def _own_payment(
     database_session: DBSession, alum: CurrentAlum, payment_uuid: UUID
@@ -91,9 +88,7 @@ def _settle_payment(
         )
         if link and link.alum_uuid:
             profile = database_session.scalar(
-                select(AlumniProfile).where(
-                    AlumniProfile.alum_uuid == link.alum_uuid
-                )
+                select(AlumniProfile).where(AlumniProfile.alum_uuid == link.alum_uuid)
             )
             if profile and not profile.reg_code:
                 profile.reg_code = generate_reg_code(database_session)
@@ -157,6 +152,17 @@ async def initiate_payment(
         None,
     )
 
+    # Address is mandatory on the profile: SSLCommerz rejects the session
+    # without cus_add1/cus_city/cus_country/cus_phone.
+    profile = database_session.scalar(
+        select(AlumniProfile).where(AlumniProfile.alum_uuid == alum.uuid)
+    )
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Alumni profile not found",
+        )
+
     if reusable:
         payment = reusable
         transaction_reference = payment.transaction_reference
@@ -182,6 +188,12 @@ async def initiate_payment(
         product_name="MPSC 50 Years Golden Jubilee Participation",
         alum_email=alum.email,
         alum_name=alum.full_name,
+        alum_phone=alum.phone_number,
+        street_address=profile.street_address,
+        city=profile.city,
+        state_or_province=profile.state_or_province,
+        postal_code=profile.postal_code,
+        country=profile.country,
         # The browser lands on the API so it is validated before success is shown.
         success_url=f"{settings.api_url}/payments/callback",
         cancel_url=f"{settings.frontend_url}/payment/cancelled",
