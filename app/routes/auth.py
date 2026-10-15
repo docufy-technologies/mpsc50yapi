@@ -8,7 +8,6 @@ from sqlmodel import Session, select
 from app.dependencies import CurrentAlum, DBSession
 from app.models import (
     Acquaintance,
-    Address,
     Alum,
     AlumniProfile,
     WorkProfile,
@@ -57,13 +56,9 @@ def _alum_information(alum: Alum, database_session: Session) -> AlumInformation:
                 work_profile, from_attributes=True
             )
 
-    address_information = None
-    if profile.address_uuid:
-        address = database_session.get(Address, profile.address_uuid)
-        if address:
-            address_information = AddressInformation.model_validate(
-                address, from_attributes=True
-            )
+    address_information = AddressInformation.model_validate(
+        profile, from_attributes=True
+    )
 
     profile_information = AlumniProfileInformation(
         uuid=profile.uuid,
@@ -147,13 +142,6 @@ def register(data: AlumRegister, database_session: DBSession):
     if data.work_profile and not data.work_profile.is_empty():
         work_profile = WorkProfile(**data.work_profile.model_dump())
         database_session.add(work_profile)
-
-    address: Address | None = None
-    if data.address and not data.address.is_empty():
-        address = Address(**data.address.model_dump())
-        database_session.add(address)
-
-    if work_profile or address:
         database_session.flush()
 
     profile = AlumniProfile(
@@ -165,7 +153,7 @@ def register(data: AlumRegister, database_session: DBSession):
         academic_group=data.academic_group,
         referred_by_alum_uuid=referrer.alum_uuid if referrer else None,
         work_profile_uuid=work_profile.uuid if work_profile else None,
-        address_uuid=address.uuid if address else None,
+        **data.address.model_dump(),
     )
     database_session.add(profile)
 

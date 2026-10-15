@@ -30,9 +30,7 @@ class SubcommitteeApplication(SQLModel, table=True):
     __tablename__ = "subcommittee_applications"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alum_uuid: UUID = Field(
-        foreign_key="alumni.uuid", ondelete="CASCADE", unique=True
-    )
+    alum_uuid: UUID = Field(foreign_key="alumni.uuid", ondelete="CASCADE", unique=True)
     first_choice: str
     second_choice: str | None = Field(default=None)
     motivation: str = Field(sa_type=Text)
@@ -82,9 +80,7 @@ class StallApplication(SQLModel, table=True):
     __tablename__ = "stall_applications"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alum_uuid: UUID = Field(
-        foreign_key="alumni.uuid", ondelete="CASCADE", unique=True
-    )
+    alum_uuid: UUID = Field(foreign_key="alumni.uuid", ondelete="CASCADE", unique=True)
     stall_name: str = Field(max_length=200)
     category: str
     description: str = Field(sa_type=Text)
@@ -138,24 +134,11 @@ class WorkProfile(SQLModel, table=True):
     department_or_division: str
 
 
-class Address(SQLModel, table=True):
-    __tablename__ = "addresses"  # type: ignore[assignment]
-
-    uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    street_address: str
-    city: str
-    state_or_province: str
-    postal_code: str
-    country: str
-
-
 class AlumniProfile(SQLModel, table=True):
     __tablename__ = "alumni_profiles"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alum_uuid: UUID = Field(
-        foreign_key="alumni.uuid", unique=True, ondelete="CASCADE"
-    )
+    alum_uuid: UUID = Field(foreign_key="alumni.uuid", unique=True, ondelete="CASCADE")
     reg_code: str | None = Field(default=None, unique=True)
     student_id: str | None = Field(default=None)
     referred_by_alum_uuid: UUID | None = Field(
@@ -166,13 +149,16 @@ class AlumniProfile(SQLModel, table=True):
     gender: str
     # Constrained to AcademicGroup in the schema, not at the column.
     academic_group: str | None = Field(default=None)
+    # Address is mandatory for SSLCommerz
+    street_address: str
+    city: str
+    state_or_province: str
+    postal_code: str
+    country: str
 
     # foreign keys
     work_profile_uuid: UUID | None = Field(
         default=None, foreign_key="work_profiles.uuid", ondelete="SET NULL"
-    )
-    address_uuid: UUID | None = Field(
-        default=None, foreign_key="addresses.uuid", ondelete="SET NULL"
     )
 
     registered_at: datetime = Field(default_factory=now, index=True)
