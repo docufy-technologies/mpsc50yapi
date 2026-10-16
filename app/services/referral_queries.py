@@ -11,9 +11,9 @@ from app.services.referrals import counts_as_referral
 def referrals_for(
     database_session: Session, alum_uuid: UUID
 ) -> tuple[list[ReferredAlumInformation], list[datetime]]:
-    rows = database_session.execute(
+    rows = database_session.exec(
         select(Alum, AlumniProfile)
-        .join(AlumniProfile, AlumniProfile.alum_uuid == Alum.uuid)
+        .join(AlumniProfile, col(AlumniProfile.alum_uuid) == col(Alum.uuid))
         .where(AlumniProfile.referred_by_alum_uuid == alum_uuid)
         .order_by(col(AlumniProfile.registered_at), col(Alum.uuid))
     ).all()
