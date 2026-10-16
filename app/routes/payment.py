@@ -195,9 +195,9 @@ async def initiate_payment(
         postal_code=profile.postal_code,
         country=profile.country,
         # The browser lands on the API so it is validated before success is shown.
-        success_url=f"{settings.api_url}/payments/callback",
+        success_url=f"{settings.app_url}/payments/callback",
         cancel_url=f"{settings.frontend_url}/payment/cancelled",
-        ipn_url=f"{settings.api_url}/payments/ipn",
+        ipn_url=f"{settings.app_url}/payments/ipn",
     )
 
     return PaymentSessionResponse(

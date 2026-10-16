@@ -86,6 +86,7 @@ class AlumniProfileInformation(BaseModel):
     gender: str
     academic_group: str | None = None
     registered_at: datetime
+    profile_picture: str | None = None
     work_profile: WorkProfileInformation | None = None
     address: AddressInformation
 

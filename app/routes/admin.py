@@ -215,6 +215,7 @@ def _full_information(alum: Alum, database_session: DBSession) -> AlumInformatio
             gender=profile.gender,
             academic_group=profile.academic_group,
             registered_at=profile.registered_at,
+            profile_picture=profile.profile_picture,
             work_profile=(
                 WorkProfileInformation.model_validate(
                     work_profile, from_attributes=True

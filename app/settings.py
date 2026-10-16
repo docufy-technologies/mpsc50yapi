@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 from pydantic import Field
@@ -34,12 +35,40 @@ class Settings(BaseSettings):
         default=True, validation_alias="SSLCOMMERZ_IS_SANDBOX"
     )
     # for sslcommerz
-    api_url: str = Field(default="http://localhost:8000", validation_alias="API_URL")
+    app_url: str = Field(default="http://localhost:8000", validation_alias="API_URL")
 
     event_fee_bdt: int = 1500
     sponsor_offer_limit: int = 3
     openmic_entry_limit: int = 2
     openmic_max_duration_minutes: int = 10
+
+    media_dir: Path = Path("media")
+
+    @property
+    def alumni_pfp_dir(self) -> Path:
+        # reasoning[rakibulhasanratul]: made a property jut to add a docstring
+        "Directory for storing alumni profile pictures (relative to alumni/)."
+        return Path("alumni") / "profile-pictures"
+
+    @property
+    def alumni_pfp_path(self) -> Path:
+        "Full path to the directory for storing alumni profile pictures (relative to media/)."
+        return self.media_dir / self.alumni_pfp_dir
+
+    def form_alumni_pfp_file_path(self, filename: str) -> Path:
+        self.alumni_pfp_path.mkdir(parents=True, exist_ok=True)
+        return self.media_dir / self.alumni_pfp_dir / filename
+
+    max_allowed_dimention: int = 1000
+    allowed_image_mime_types: set[str] = {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/bmp",
+        "image/tiff",
+    }
+    max_allowed_image_size_bytes: int = 100 * 1024  # 100kb
+    image_upload_size_cap_bytes: int = 5 * 1024 * 1024  # 5MB
 
     dev_mode: bool = Field(default=False, validation_alias="DEV_MODE")
 

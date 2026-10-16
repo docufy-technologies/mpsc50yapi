@@ -1,15 +1,18 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlmodel import SQLModel
 
-from app.routes import admin, auth, involve, payment, public
+from app.routes import admin, auth, involve, media, payment, public
 
 DESCRIPTION = """
 Backend for the MPSC 50 Years Golden Jubilee celebration.
 
 * `/auth/*` registration, login and profile management
+* `/media/*` media uploads and assets
 * `/admin/*` admin-only endpoints
 * `/payments/*` SSLCommerz checkout
 * `/public/*` unauthenticated event information
@@ -46,10 +49,15 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(media.router)
 app.include_router(admin.router)
 app.include_router(payment.router)
 app.include_router(public.router)
 app.include_router(involve.router)
+
+# Mount media directory for static file access (ensuring directory exists)
+Path("media").mkdir(parents=True, exist_ok=True)
+app.mount("/media/assets", StaticFiles(directory="media"), name="media")
 
 
 @app.get("/", tags=["Health"])

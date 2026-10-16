@@ -69,6 +69,7 @@ def _alum_information(alum: Alum, database_session: Session) -> AlumInformation:
         gender=profile.gender,
         academic_group=profile.academic_group,
         registered_at=profile.registered_at,
+        profile_picture=profile.profile_picture,
         work_profile=work_profile_information,
         address=address_information,
     )
