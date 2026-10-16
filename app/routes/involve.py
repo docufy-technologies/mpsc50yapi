@@ -39,6 +39,7 @@ def read_my_referrals(alum: CurrentAlum, database_session: DBSession):
     if profile is None:
         raise HTTPException(status_code=404, detail="Alum profile not found")
     referrals, qualifying_dates = referrals_for(database_session, alum.uuid)
+    assert profile.reg_code is not None, "If I referred anyone, I must have a reg code"
     return MyReferralsInformation(
         referral_code=profile.reg_code,
         referral_count=len(qualifying_dates),

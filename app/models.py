@@ -5,6 +5,7 @@ from sqlalchemy import JSON, Text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.helper import now
+from app.settings import settings
 
 
 class Payment(SQLModel, table=True):
@@ -155,6 +156,16 @@ class AlumniProfile(SQLModel, table=True):
     state_or_province: str
     postal_code: str
     country: str
+
+    profile_picture: str | None = Field(default=None)
+
+    @property
+    def pfp_path(self) -> str:
+        return (
+            str(settings.form_alumni_pfp_file_path(self.profile_picture))
+            if self.profile_picture
+            else ""
+        )
 
     # foreign keys
     work_profile_uuid: UUID | None = Field(
