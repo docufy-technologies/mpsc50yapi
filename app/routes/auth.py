@@ -9,7 +9,6 @@ from app.dependencies import CurrentAlum, DBSession
 from app.models import (
     Acquaintance,
     Alum,
-    AlumniProfile,
     WorkProfile,
 )
 from app.schemas.alumni import (
@@ -36,40 +35,28 @@ router = APIRouter(prefix="/auth", tags=["Authentication Routes"])
 
 def _alum_information(alum: Alum, database_session: Session) -> AlumInformation:
 
-    profile = database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.alum_uuid == alum.uuid)
-    )
-
-    assert profile is not None
-    # reasoning[rakibulhasanratul]: According to the current design,
-    # Alum is the bare minimum login entity & AlumniProfile holds the
-    # extended information about an Alum. So, it is obvious that we
-    # shall find a profile each alum
-
     profile_information = None
 
     work_profile_information = None
-    if profile.work_profile_uuid:
-        work_profile = database_session.get(WorkProfile, profile.work_profile_uuid)
+    if alum.work_profile_uuid:
+        work_profile = database_session.get(WorkProfile, alum.work_profile_uuid)
         if work_profile:
             work_profile_information = WorkProfileInformation.model_validate(
                 work_profile, from_attributes=True
             )
 
-    address_information = AddressInformation.model_validate(
-        profile, from_attributes=True
-    )
+    address_information = AddressInformation.model_validate(alum, from_attributes=True)
 
     profile_information = AlumniProfileInformation(
-        uuid=profile.uuid,
-        reg_code=profile.reg_code,
-        student_id=profile.student_id,
-        batch_year=profile.batch_year,
-        tee_shirt_size=profile.tee_shirt_size,
-        gender=profile.gender,
-        academic_group=profile.academic_group,
-        registered_at=profile.registered_at,
-        profile_picture=profile.profile_picture,
+        uuid=alum.uuid,
+        reg_code=alum.reg_code,
+        student_id=alum.student_id,
+        batch_year=alum.batch_year,
+        tee_shirt_size=alum.tee_shirt_size,
+        gender=alum.gender,
+        academic_group=alum.academic_group,
+        registered_at=alum.registered_at,
+        profile_picture=alum.profile_picture,
         work_profile=work_profile_information,
         address=address_information,
     )
@@ -114,30 +101,10 @@ def register(data: AlumRegister, database_session: DBSession):
     referrer = None
     if data.referrer_reg_code:
         referrer = database_session.scalar(
-            select(AlumniProfile).where(
-                AlumniProfile.reg_code == data.referrer_reg_code
-            )
+            select(Alum).where(Alum.reg_code == data.referrer_reg_code)
         )
         if not referrer:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Referrer registration code not found",
-            )
-        if not database_session.get(Alum, referrer.alum_uuid):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Referrer registration code is not linked to an alum",
-            )
-
-    alum = Alum(
-        full_name=data.full_name,
-        email=email,
-        phone_number=data.phone_number,
-        password_hash=hash_password(data.password),
-        status="pending",
-    )
-    database_session.add(alum)
-    database_session.flush()
+            pass  # reasoning[reakibulhasanratul]: Typo mistakes happen. Let them allow registration without a referrer!
 
     work_profile: WorkProfile | None = None
     if data.work_profile and not data.work_profile.is_empty():
@@ -145,18 +112,23 @@ def register(data: AlumRegister, database_session: DBSession):
         database_session.add(work_profile)
         database_session.flush()
 
-    profile = AlumniProfile(
-        alum_uuid=alum.uuid,
+    alum = Alum(
+        full_name=data.full_name,
+        email=email,
+        phone_number=data.phone_number,
+        password_hash=hash_password(data.password),
+        status="pending",
         student_id=data.student_id,
         batch_year=data.batch_year,
         tee_shirt_size=data.tee_shirt_size,
         gender=data.gender,
         academic_group=data.academic_group,
-        referred_by_alum_uuid=referrer.alum_uuid if referrer else None,
+        referred_by_alum_uuid=referrer.uuid if referrer else None,
         work_profile_uuid=work_profile.uuid if work_profile else None,
         **data.address.model_dump(),
     )
-    database_session.add(profile)
+    database_session.add(alum)
+    database_session.flush()
 
     for acquaintance in data.acquaintances:
         database_session.add(

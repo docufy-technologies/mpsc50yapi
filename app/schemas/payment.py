@@ -22,7 +22,7 @@ class PaymentSessionResponse(BaseModel):
     session_key: str
 
 
-class AdminPaymentSummary(BaseModel):
+class PaymentSummary(BaseModel):
     """Latest payment for one alum. Defaults to unpaid."""
 
     has_paid: bool = False
