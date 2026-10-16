@@ -11,7 +11,6 @@ from app.models import (
     Admin,
     Alum,
     AlumniPayment,
-    AlumniProfile,
     Payment,
     WorkProfile,
 )
@@ -23,7 +22,7 @@ from app.schemas.alumni import (
     WorkProfileInformation,
 )
 from app.schemas.auth import AdminInfo, AdminLogin, AdminSession
-from app.schemas.payment import AdminPaymentSummary
+from app.schemas.payment import PaymentSummary
 from app.schemas.referrals import ReferralDrillDown, ReferralLeaderboardEntry
 from app.services.admin import encode_admin_token
 from app.services.auth import verify_password
@@ -102,9 +101,7 @@ def get_admin_information(admin: CurrentAdmin):
     )
 
 
-def _payment_summary(
-    alum_uuid: UUID, database_session: DBSession
-) -> AdminPaymentSummary:
+def _payment_summary(alum_uuid: UUID, database_session: DBSession) -> PaymentSummary:
     """Payment state for one alum, in one query to avoid N+1 on the listing.
 
     Ordered by status before time: a settled payment takes its timestamp from the
@@ -124,9 +121,9 @@ def _payment_summary(
     )
 
     if not payment:
-        return AdminPaymentSummary()
+        return PaymentSummary()
 
-    return AdminPaymentSummary(
+    return PaymentSummary(
         has_paid=payment.status == "completed",
         latest_status=cast(PaymentStatus, payment.status),
         amount=payment.amount,
@@ -139,19 +136,17 @@ def _payment_summary(
 def referral_leaderboard(
     _: CurrentAdmin, database_session: DBSession
 ) -> list[ReferralLeaderboardEntry]:
-    profiles = database_session.scalars(select(AlumniProfile)).all()
+    alums = database_session.scalars(select(Alum)).all()
     entries = []
-    for profile in profiles:
-        alum = database_session.get(Alum, profile.alum_uuid)
-        if not alum:
+    for alum in alums:
+        if alum.reg_code is None:
             continue
         _referrals, dates = referrals_for(database_session, alum.uuid)
-        assert profile.reg_code is not None, "AlumniProfile.reg_code should not be None"
         entries.append(
             ReferralLeaderboardEntry(
                 alum_uuid=alum.uuid,
                 full_name=alum.full_name,
-                referral_code=profile.reg_code,
+                referral_code=alum.reg_code,
                 referral_count=len(dates),
                 earliest_qualifying_referral=min(dates) if dates else None,
             )
@@ -175,17 +170,13 @@ def referral_drilldown(
     alum_uuid: UUID, _: CurrentAdmin, database_session: DBSession
 ) -> ReferralDrillDown:
     alum = database_session.get(Alum, alum_uuid)
-    profile = database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.alum_uuid == alum_uuid)
-    )
-    if not alum or not profile:
+    if not alum or alum.reg_code is None:
         raise HTTPException(status_code=404, detail="Alum not found")
     referrals, dates = referrals_for(database_session, alum_uuid)
-    assert profile.reg_code is not None, "AlumniProfile.reg_code should not be None"
     return ReferralDrillDown(
         alum_uuid=alum.uuid,
         full_name=alum.full_name,
-        referral_code=profile.reg_code,
+        referral_code=alum.reg_code,
         referral_count=len(dates),
         earliest_qualifying_referral=min(dates) if dates else None,
         referrals=referrals,
@@ -194,37 +185,31 @@ def referral_drilldown(
 
 def _full_information(alum: Alum, database_session: DBSession) -> AlumInformation:
     """Admin-side projection: includes status and profile even when incomplete."""
-    profile = database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.alum_uuid == alum.uuid)
+    work_profile = (
+        database_session.get(WorkProfile, alum.work_profile_uuid)
+        if alum.work_profile_uuid
+        else None
     )
 
-    profile_information = None
-    if profile:
-        work_profile = (
-            database_session.get(WorkProfile, profile.work_profile_uuid)
-            if profile.work_profile_uuid
+    profile_information = AlumniProfileInformation(
+        uuid=alum.uuid,
+        reg_code=alum.reg_code,
+        student_id=alum.student_id,
+        batch_year=alum.batch_year,
+        tee_shirt_size=alum.tee_shirt_size,
+        gender=alum.gender,
+        academic_group=alum.academic_group,
+        registered_at=alum.registered_at,
+        profile_picture=alum.profile_picture,
+        work_profile=(
+            WorkProfileInformation.model_validate(
+                work_profile, from_attributes=True
+            )
+            if work_profile
             else None
-        )
-
-        profile_information = AlumniProfileInformation(
-            uuid=profile.uuid,
-            reg_code=profile.reg_code,
-            student_id=profile.student_id,
-            batch_year=profile.batch_year,
-            tee_shirt_size=profile.tee_shirt_size,
-            gender=profile.gender,
-            academic_group=profile.academic_group,
-            registered_at=profile.registered_at,
-            profile_picture=profile.profile_picture,
-            work_profile=(
-                WorkProfileInformation.model_validate(
-                    work_profile, from_attributes=True
-                )
-                if work_profile
-                else None
-            ),
-            address=AddressInformation.model_validate(profile, from_attributes=True),
-        )
+        ),
+        address=AddressInformation.model_validate(alum, from_attributes=True),
+    )
 
     acquaintances = database_session.scalars(
         select(Acquaintance).where(Acquaintance.alum_uuid == alum.uuid)

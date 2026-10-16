@@ -9,7 +9,7 @@ from sqlmodel import col, select
 
 from app.dependencies import CurrentAlum, DBSession
 from app.helper import generate_reg_code, now
-from app.models import AlumniPayment, AlumniProfile, Payment
+from app.models import Alum, AlumniPayment, Payment
 from app.schemas.payment import PaymentInformation, PaymentSessionResponse
 from app.services.sslcommerz import (
     ValidationOutcome,
@@ -87,12 +87,10 @@ def _settle_payment(
             select(AlumniPayment).where(AlumniPayment.payment_uuid == payment.uuid)
         )
         if link and link.alum_uuid:
-            profile = database_session.scalar(
-                select(AlumniProfile).where(AlumniProfile.alum_uuid == link.alum_uuid)
-            )
-            if profile and not profile.reg_code:
-                profile.reg_code = generate_reg_code(database_session)
-                database_session.add(profile)
+            alum_record = database_session.get(Alum, link.alum_uuid)
+            if alum_record and not alum_record.reg_code:
+                alum_record.reg_code = generate_reg_code(database_session)
+                database_session.add(alum_record)
 
     database_session.add(payment)
     database_session.commit()
@@ -152,16 +150,9 @@ async def initiate_payment(
         None,
     )
 
-    # Address is mandatory on the profile: SSLCommerz rejects the session
+    # Address is mandatory on the alum: SSLCommerz rejects the session
     # without cus_add1/cus_city/cus_country/cus_phone.
-    profile = database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.alum_uuid == alum.uuid)
-    )
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Alumni profile not found",
-        )
+    profile = alum
 
     if reusable:
         payment = reusable

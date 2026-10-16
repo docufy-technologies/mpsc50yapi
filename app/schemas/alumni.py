@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
-from app.schemas.payment import AdminPaymentSummary
+from app.schemas.payment import PaymentSummary
 from app.types import AcademicGroup, AgeGroup, Gender, TeeShirtSize
 
 
@@ -100,7 +100,7 @@ class AlumInformation(BaseModel):
     created_at: datetime
     profile: AlumniProfileInformation | None = None
     # Only populated by the admin projection; alum routes leave it empty.
-    payment: AdminPaymentSummary = Field(default_factory=AdminPaymentSummary)
+    payment: PaymentSummary = Field(default_factory=PaymentSummary)
     acquaintances: list[AcquaintanceInformation] = Field(default_factory=list)
 
 

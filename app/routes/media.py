@@ -1,10 +1,8 @@
 import io
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
-from sqlmodel import select
+from fastapi import APIRouter, File, UploadFile, status
 
 from app.dependencies import CurrentAlum, DBSession
-from app.models import AlumniProfile
 from app.schemas.media import AlumniProfilePictureResponse
 from app.services.media import (
     _process_img,
@@ -18,24 +16,16 @@ router = APIRouter(prefix=f"/{settings.media_dir}", tags=["Media Routes"])
 
 
 @router.post(
-    "/alumni/profile-picture",
+    f"{settings.alumni_pfp_dir}",
     response_model=AlumniProfilePictureResponse,
     summary="Upload profile picture for currently logged in alum",
+    status_code=status.HTTP_201_CREATED,
 )
 async def upload_profile_picture(
     alum: CurrentAlum,
     database_session: DBSession,
     file: UploadFile = File(...),
 ) -> AlumniProfilePictureResponse:
-    profile = database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.alum_uuid == alum.uuid)
-    )
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Alumni profile not found",
-        )
-
     content = await validate_image_upload(file)
     processed_buffer = _process_img(io.BytesIO(content))
 
@@ -43,44 +33,35 @@ async def upload_profile_picture(
     new_filename = save_alumni_profile_picture(processed_buffer)
 
     # Delete previous picture if exists
-    old_picture = profile.profile_picture
+    old_picture = alum.profile_picture
     if old_picture:
         delete_alumni_profile_picture(old_picture)
 
     # Update database record
-    profile.profile_picture = new_filename
-    database_session.add(profile)
+    alum.profile_picture = new_filename
+    database_session.add(alum)
     database_session.commit()
-    database_session.refresh(profile)
+    database_session.refresh(alum)
 
     return AlumniProfilePictureResponse(alum_uuid=alum.uuid, filename=new_filename)
 
 
 @router.delete(
-    "/alumni/profile-picture",
+    f"{settings.alumni_pfp_dir}",
     summary="Delete profile picture for currently logged in alum",
     response_model=AlumniProfilePictureResponse,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def delete_profile_picture(
     alum: CurrentAlum,
     database_session: DBSession,
 ) -> AlumniProfilePictureResponse:
-    profile = database_session.scalar(
-        select(AlumniProfile).where(AlumniProfile.alum_uuid == alum.uuid)
-    )
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Alumni profile not found",
-        )
-
-    # Delete previous picture if exists
-    old_picture = profile.profile_picture
+    old_picture = alum.profile_picture
     if old_picture:
         delete_alumni_profile_picture(old_picture)
-        profile.profile_picture = None
-        database_session.add(profile)
+        alum.profile_picture = None
+        database_session.add(alum)
         database_session.commit()
-        database_session.refresh(profile)
+        database_session.refresh(alum)
 
     return AlumniProfilePictureResponse(alum_uuid=alum.uuid, filename="")

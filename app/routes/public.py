@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from sqlmodel import func, select
 
 from app.dependencies import DBSession
-from app.models import Alum, AlumniProfile, EventDeadline
+from app.models import Alum, EventDeadline
 from app.schemas.public import EventInformation, PublicDeadline, PublicStatistics
 from app.services.deadlines import deadline_is_open
 from app.settings import settings
@@ -19,7 +19,7 @@ EVENT_INFORMATION = EventInformation(
     event_date="2026-12-20",
     venue="Mohammadpur Preparatory School & College, Mohammadpur, Dhaka",
     # Overridden per request from settings.event_fee_bdt, the amount charged.
-    participation_fee_bdt=0,
+    participation_fee_bdt=settings.event_fee_bdt,
 )
 
 
@@ -27,9 +27,7 @@ EVENT_INFORMATION = EventInformation(
     "/event", response_model=EventInformation, summary="Static event information"
 )
 def get_event_information() -> EventInformation:
-    return EVENT_INFORMATION.model_copy(
-        update={"participation_fee_bdt": settings.event_fee_bdt}
-    )
+    return EVENT_INFORMATION
 
 
 @router.get(
@@ -44,7 +42,7 @@ def get_statistics(database_session: DBSession) -> PublicStatistics:
     total = database_session.scalar(select(func.count()).select_from(Alum))
 
     distinct_batches = database_session.scalar(
-        select(func.count(func.distinct(AlumniProfile.batch_year)))
+        select(func.count(func.distinct(Alum.batch_year)))
     )
 
     return PublicStatistics(
