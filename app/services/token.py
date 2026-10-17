@@ -63,12 +63,3 @@ def decode_token(token: str, verify_exp: bool = True) -> dict[str, Any]:
     )
 
 
-def is_within_refresh_window(payload: dict[str, Any]) -> bool:
-    """A token may be refreshed only while it is expired by less than
-    REFRESH_WINDOW_SECONDS. Previously this compared `exp` against
-    `now - TTL`, which could never trigger before the token was doubly expired."""
-    exp_time = payload.get("exp")
-    if not isinstance(exp_time, int):
-        return False
-
-    return now().timestamp() - exp_time <= REFRESH_WINDOW_SECONDS
