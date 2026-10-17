@@ -5,12 +5,9 @@ from sqlmodel import Session
 
 from app.database import get_database_session
 from app.models import Admin, Alum
+from app.services.auth import get_current_admin, get_current_alum
 
 DBSession = Annotated[Session, Depends(get_database_session)]
-
-from app.services.admin import get_current_admin
-from app.services.auth import get_current_alum
-
 CurrentAlum = Annotated[Alum, Depends(get_current_alum)]
 CurrentAdmin = Annotated[Admin, Depends(get_current_admin)]
 

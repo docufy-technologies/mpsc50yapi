@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,25 +16,24 @@ class Settings(BaseSettings):
     jwt_private_key: str = Field(..., validation_alias="JWT_SECRET_KEY")
     jwt_public_key: str = Field(..., validation_alias="JWT_PUBLIC_KEY")
     jwt_algorithm: str = Field(..., validation_alias="JWT_ALGORITHM")
-    access_token_name: str = Field(..., validation_alias="ACCESS_TOKEN_NAME")
-    admin_access_token_name: str = Field(
+    alum_access_token: str = Field(..., validation_alias="ALUM_ACCESS_TOKEN_NAME")
+    admin_access_token: str = Field(
         default=..., validation_alias="ADMIN_ACCESS_TOKEN_NAME"
     )
-    refresh_token_name: str = Field(
-        default="alum_refresh_token", validation_alias="REFRESH_TOKEN_NAME"
+    alum_refresh_token: str = Field(
+        default=..., validation_alias="ALUM_REFRESH_TOKEN_NAME"
     )
-    admin_refresh_token_name: str = Field(
-        default="mpsc_admin_refresh_token", validation_alias="ADMIN_REFRESH_TOKEN_NAME"
+    admin_refresh_token: str = Field(
+        default=..., validation_alias="ADMIN_REFRESH_TOKEN_NAME"
     )
 
     # Hardcoded token lifetimes (seconds).
     access_token_ttl_seconds: int = 15 * 60
-    admin_access_token_ttl_seconds: int = 15 * 60
     admin_refresh_token_ttl_seconds: int = 30 * 60
     alum_refresh_token_ttl_seconds: int = 60 * 60 * 24 * 7
 
     domain: str = Field(default=..., validation_alias="COOKIE_DOMAIN")
-    subcommittee_names = {
+    subcommittee_names: set[str] = {
         "Registration",
         "Food and Hospitality",
         "Cultural Program",
@@ -57,7 +56,7 @@ class Settings(BaseSettings):
     # for sslcommerz
     app_url: str = Field(default="http://localhost:8000", validation_alias="API_URL")
 
-    event_fee_bdt: int = 1500
+    event_fee_bdt: int = 3000
     sponsor_offer_limit: int = 3
     openmic_entry_limit: int = 2
     openmic_max_duration_minutes: int = 10
@@ -92,7 +91,7 @@ class Settings(BaseSettings):
 
     dev_mode: bool = Field(default=False, validation_alias="DEV_MODE")
 
-    def _cookie_config(
+    def _cookie_param(
         self, key: str, value: str, max_age: int | None
     ) -> dict[str, Any]:
         return {
@@ -106,32 +105,41 @@ class Settings(BaseSettings):
             "domain": None if self.dev_mode else self.domain,
         }
 
-    def access_token_config(self, access_token: str, max_age: int) -> dict[str, Any]:
-        return self._cookie_config(self.access_token_name, access_token, max_age)
-
-    def admin_access_token_config(
-        self, admin_access_token: str, max_age: int
+    def access_token_cookie_param(
+        self, access_token: str, entity: Literal["alum", "admin"]
     ) -> dict[str, Any]:
-        return self._cookie_config(
-            self.admin_access_token_name, admin_access_token, max_age
-        )
+        key = self.alum_access_token if entity == "alum" else self.admin_access_token
+        return self._cookie_param(key, access_token, self.access_token_ttl_seconds)
 
-    def refresh_token_config(self, refresh_token: str, max_age: int) -> dict[str, Any]:
-        return self._cookie_config(self.refresh_token_name, refresh_token, max_age)
-
-    def admin_refresh_token_config(
-        self, admin_refresh_token: str, max_age: int
+    def refresh_token_cookie_param(
+        self, refresh_token: str, entity: Literal["alum", "admin"]
     ) -> dict[str, Any]:
-        return self._cookie_config(
-            self.admin_refresh_token_name, admin_refresh_token, max_age
+        key = self.alum_refresh_token if entity == "alum" else self.admin_refresh_token
+        max_age = (
+            self.alum_refresh_token_ttl_seconds
+            if entity == "alum"
+            else self.admin_refresh_token_ttl_seconds
         )
+        return self._cookie_param(key, refresh_token, max_age)
 
-    def delete_cookie_config(self, key: str) -> dict[str, Any]:
+    def _cookie_deletion_param(self, key: str) -> dict[str, Any]:
         return {
             "key": key,
             "path": "/",
             "domain": None if self.dev_mode else self.domain,
         }
+
+    def access_token_cookie_deletion_param(
+        self, entity: Literal["alum", "admin"]
+    ) -> dict[str, Any]:
+        key = self.alum_access_token if entity == "alum" else self.admin_access_token
+        return self._cookie_deletion_param(key)
+
+    def refresh_token_cookie_deletion_param(
+        self, entity: Literal["alum", "admin"]
+    ) -> dict[str, Any]:
+        key = self.alum_refresh_token if entity == "alum" else self.admin_refresh_token
+        return self._cookie_deletion_param(key)
 
 
 settings = Settings()  # type: ignore[assignment]
