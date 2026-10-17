@@ -25,15 +25,15 @@ async def validate_image_upload(upload_file: UploadFile) -> bytes:
     if len(content) > _upload_cap:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Image size exceeds the maximum limit of 5 MB.",
+            detail=f"Image size exceeds the maximum limit of {settings.image_upload_size_cap_bytes / (1024 * 1024)} MB.",
         )
 
     return content
 
 
 def _process_img(image_file: BinaryIO) -> io.BytesIO:
-    """Resize image to within settings.img_max_dimention and compress to WEBP <= 100KB."""
-    _max_dimention = settings.max_allowed_dimention
+    """Resize image to within settings.img_max_dimension and compress to WEBP."""
+    _max_dimension = settings.max_allowed_dimension
     _target_byte_size: int = settings.max_allowed_image_size_bytes
     try:
         img = Image.open(image_file)
@@ -56,12 +56,12 @@ def _process_img(image_file: BinaryIO) -> io.BytesIO:
         original_width, original_height = img.size
 
         # Only resize if the longest side > max_dim
-        if max(original_width, original_height) > _max_dimention:
+        if max(original_width, original_height) > _max_dimension:
             if original_width > original_height:
-                new_width = _max_dimention
+                new_width = _max_dimension
                 new_height = int(original_height * (new_width / original_width))
             else:
-                new_height = _max_dimention
+                new_height = _max_dimension
                 new_width = int(original_width * (new_height / original_height))
 
             img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)

@@ -16,7 +16,7 @@ router = APIRouter(prefix=f"/{settings.media_dir}", tags=["Media Routes"])
 
 
 @router.post(
-    f"{settings.alumni_pfp_dir}",
+    f"/{settings.alumni_pfp_dir}",
     response_model=AlumniProfilePictureResponse,
     summary="Upload profile picture for currently logged in alum",
     status_code=status.HTTP_201_CREATED,
@@ -47,7 +47,7 @@ async def upload_profile_picture(
 
 
 @router.delete(
-    f"{settings.alumni_pfp_dir}",
+    f"/{settings.alumni_pfp_dir}",
     summary="Delete profile picture for currently logged in alum",
     response_model=AlumniProfilePictureResponse,
     status_code=status.HTTP_202_ACCEPTED,
