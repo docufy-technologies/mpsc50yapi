@@ -1,16 +1,18 @@
+from datetime import timedelta, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import jwt
-
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 
 from app.dependencies import CurrentAlum, DBSession
+from app.helper import now
 from app.models import (
     Acquaintance,
     Alum,
+    RefreshToken,
     WorkProfile,
 )
 from app.schemas.alumni import (
@@ -23,11 +25,6 @@ from app.schemas.alumni import (
     WorkProfileInformation,
 )
 from app.schemas.auth import AlumLogin, PasswordUpdate
-from datetime import timedelta, timezone
-from uuid import uuid4
-
-from app.helper import now
-from app.models import RefreshToken
 from app.services.auth import hash_password, verify_password
 from app.services.token import (
     decode_token,
@@ -155,7 +152,8 @@ def register(data: AlumRegister, database_session: DBSession):
             alum_uuid=alum.uuid,
             refresh_token_jti=refresh_jti,
             created_at=now(),
-            expires_at=now() + timedelta(seconds=settings.alum_refresh_token_ttl_seconds),
+            expires_at=now()
+            + timedelta(seconds=settings.alum_refresh_token_ttl_seconds),
             revoked=False,
         )
     )
@@ -171,7 +169,9 @@ def register(data: AlumRegister, database_session: DBSession):
         **settings.access_token_config(access_token, settings.access_token_ttl_seconds)
     )
     response.set_cookie(
-        **settings.refresh_token_config(refresh_token, settings.alum_refresh_token_ttl_seconds)
+        **settings.refresh_token_config(
+            refresh_token, settings.alum_refresh_token_ttl_seconds
+        )
     )
     return response
 
@@ -203,7 +203,8 @@ def login(cred: AlumLogin, database_session: DBSession):
             alum_uuid=alum.uuid,
             refresh_token_jti=refresh_jti,
             created_at=now(),
-            expires_at=now() + timedelta(seconds=settings.alum_refresh_token_ttl_seconds),
+            expires_at=now()
+            + timedelta(seconds=settings.alum_refresh_token_ttl_seconds),
             revoked=False,
         )
     )
@@ -219,7 +220,9 @@ def login(cred: AlumLogin, database_session: DBSession):
         **settings.access_token_config(access_token, settings.access_token_ttl_seconds)
     )
     response.set_cookie(
-        **settings.refresh_token_config(refresh_token, settings.alum_refresh_token_ttl_seconds)
+        **settings.refresh_token_config(
+            refresh_token, settings.alum_refresh_token_ttl_seconds
+        )
     )
     return response
 
@@ -239,7 +242,7 @@ def logout(request: Request, database_session: DBSession):
                     record.revoked = True
                     database_session.add(record)
                     database_session.commit()
-        except Exception:
+        except (jwt.InvalidTokenError, ValueError, TypeError):
             pass
 
     response = JSONResponse(
@@ -319,7 +322,8 @@ def refresh_access_token(request: Request, database_session: DBSession):
             alum_uuid=alum.uuid,
             refresh_token_jti=new_jti,
             created_at=now(),
-            expires_at=now() + timedelta(seconds=settings.alum_refresh_token_ttl_seconds),
+            expires_at=now()
+            + timedelta(seconds=settings.alum_refresh_token_ttl_seconds),
             revoked=False,
         )
         database_session.add(new_db_token)
@@ -330,10 +334,14 @@ def refresh_access_token(request: Request, database_session: DBSession):
             content={"message": "Token refreshed successfully"},
         )
         response.set_cookie(
-            **settings.access_token_config(new_access_token, settings.access_token_ttl_seconds)
+            **settings.access_token_config(
+                new_access_token, settings.access_token_ttl_seconds
+            )
         )
         response.set_cookie(
-            **settings.refresh_token_config(new_refresh_token, settings.alum_refresh_token_ttl_seconds)
+            **settings.refresh_token_config(
+                new_refresh_token, settings.alum_refresh_token_ttl_seconds
+            )
         )
         return response
 
@@ -347,7 +355,7 @@ def refresh_access_token(request: Request, database_session: DBSession):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
-    except Exception as e:
+    except (jwt.InvalidTokenError, ValueError, TypeError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         ) from e
@@ -383,7 +391,7 @@ def verify_token(request: Request, database_session: DBSession) -> dict[str, Any
         return {"message": "Validated", "data": {"uuid": str(alum.uuid)}}
     except HTTPException:
         raise
-    except Exception as e:
+    except (jwt.InvalidTokenError, ValueError, TypeError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access token"
         ) from e

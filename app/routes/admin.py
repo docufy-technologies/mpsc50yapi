@@ -1,16 +1,18 @@
+import datetime
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import jwt
-
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlmodel import case, col, func, select
 
 from app.dependencies import CurrentAdmin, DBSession
+from app.helper import now
 from app.models import (
     Acquaintance,
     Admin,
+    AdminRefreshToken,
     Alum,
     AlumniPayment,
     Payment,
@@ -26,11 +28,6 @@ from app.schemas.alumni import (
 from app.schemas.auth import AdminInfo, AdminLogin, AdminSession
 from app.schemas.payment import PaymentSummary
 from app.schemas.referrals import ReferralDrillDown, ReferralLeaderboardEntry
-from datetime import timedelta, timezone
-from uuid import uuid4
-
-from app.helper import now
-from app.models import AdminRefreshToken
 from app.services.admin import encode_admin_token
 from app.services.auth import verify_password
 from app.services.referral_queries import referrals_for
@@ -67,7 +64,8 @@ def admin_login(credentials: AdminLogin, database_session: DBSession) -> JSONRes
 
     refresh_jti = str(uuid4())
     refresh_token = encode_refresh_token(
-        {"admin_uuid": str(admin.uuid), "admin": True}, refresh_jti,
+        {"admin_uuid": str(admin.uuid), "admin": True},
+        refresh_jti,
         expiry_seconds=settings.admin_refresh_token_ttl_seconds,
     )
     database_session.add(
@@ -75,7 +73,8 @@ def admin_login(credentials: AdminLogin, database_session: DBSession) -> JSONRes
             admin_uuid=admin.uuid,
             refresh_token_jti=refresh_jti,
             created_at=now(),
-            expires_at=now() + timedelta(seconds=settings.admin_refresh_token_ttl_seconds),
+            expires_at=now()
+            + datetime.timedelta(seconds=settings.admin_refresh_token_ttl_seconds),
             revoked=False,
         )
     )
@@ -83,13 +82,19 @@ def admin_login(credentials: AdminLogin, database_session: DBSession) -> JSONRes
 
     response = JSONResponse(
         status_code=status.HTTP_200_OK,
-        content=AdminSession(expires_in=settings.admin_access_token_ttl_seconds).model_dump(),
+        content=AdminSession(
+            expires_in=settings.admin_access_token_ttl_seconds
+        ).model_dump(),
     )
     response.set_cookie(
-        **settings.admin_access_token_config(admin_access_token, settings.admin_access_token_ttl_seconds)
+        **settings.admin_access_token_config(
+            admin_access_token, settings.admin_access_token_ttl_seconds
+        )
     )
     response.set_cookie(
-        **settings.admin_refresh_token_config(refresh_token, settings.admin_refresh_token_ttl_seconds)
+        **settings.admin_refresh_token_config(
+            refresh_token, settings.admin_refresh_token_ttl_seconds
+        )
     )
     return response
 
@@ -114,7 +119,7 @@ def admin_logout(request: Request, database_session: DBSession) -> JSONResponse:
                     record.revoked = True
                     database_session.add(record)
                     database_session.commit()
-        except Exception:
+        except (jwt.InvalidTokenError, ValueError, TypeError):
             pass
 
     response = JSONResponse(
@@ -154,7 +159,9 @@ def refresh_admin_access_token(request: Request, database_session: DBSession):
             )
 
         admin = database_session.scalar(
-            select(Admin).where(Admin.uuid == UUID(admin_uuid_str), Admin.is_active == True)
+            select(Admin).where(
+                Admin.uuid == UUID(admin_uuid_str), Admin.is_active == True
+            )
         )
         if not admin:
             raise HTTPException(
@@ -179,7 +186,7 @@ def refresh_admin_access_token(request: Request, database_session: DBSession):
 
         expires_at = db_refresh_token.expires_at
         if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
+            expires_at = expires_at.replace(tzinfo=datetime.UTC)
         if expires_at < now():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Refresh token expired"
@@ -192,7 +199,8 @@ def refresh_admin_access_token(request: Request, database_session: DBSession):
 
         new_jti = str(uuid4())
         new_refresh_token = encode_refresh_token(
-            {"admin_uuid": str(admin.uuid), "admin": True}, new_jti,
+            {"admin_uuid": str(admin.uuid), "admin": True},
+            new_jti,
             expiry_seconds=settings.admin_refresh_token_ttl_seconds,
         )
 
@@ -200,7 +208,8 @@ def refresh_admin_access_token(request: Request, database_session: DBSession):
             admin_uuid=admin.uuid,
             refresh_token_jti=new_jti,
             created_at=now(),
-            expires_at=now() + timedelta(seconds=settings.admin_refresh_token_ttl_seconds),
+            expires_at=now()
+            + datetime.timedelta(seconds=settings.admin_refresh_token_ttl_seconds),
             revoked=False,
         )
         database_session.add(new_db_token)
@@ -211,10 +220,14 @@ def refresh_admin_access_token(request: Request, database_session: DBSession):
             content={"message": "Token refreshed successfully"},
         )
         response.set_cookie(
-            **settings.admin_access_token_config(new_access_token, settings.admin_access_token_ttl_seconds)
+            **settings.admin_access_token_config(
+                new_access_token, settings.admin_access_token_ttl_seconds
+            )
         )
         response.set_cookie(
-            **settings.admin_refresh_token_config(new_refresh_token, settings.admin_refresh_token_ttl_seconds)
+            **settings.admin_refresh_token_config(
+                new_refresh_token, settings.admin_refresh_token_ttl_seconds
+            )
         )
         return response
 
@@ -228,7 +241,7 @@ def refresh_admin_access_token(request: Request, database_session: DBSession):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
-    except Exception as e:
+    except (jwt.InvalidTokenError, ValueError, TypeError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         ) from e
@@ -357,9 +370,7 @@ def _full_information(alum: Alum, database_session: DBSession) -> AlumInformatio
         registered_at=alum.registered_at,
         profile_picture=alum.profile_picture,
         work_profile=(
-            WorkProfileInformation.model_validate(
-                work_profile, from_attributes=True
-            )
+            WorkProfileInformation.model_validate(work_profile, from_attributes=True)
             if work_profile
             else None
         ),

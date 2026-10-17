@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     alum_refresh_token_ttl_seconds: int = 60 * 60 * 24 * 7
 
     domain: str = Field(default=..., validation_alias="COOKIE_DOMAIN")
+    subcommittee_names = {
+        "Registration",
+        "Food and Hospitality",
+        "Cultural Program",
+        "Publicity",
+        "Logistics",
+        "Finance",
+    }
     frontend_url: str = Field(
         default="http://localhost:3000", validation_alias="FRONTEND_URL"
     )
