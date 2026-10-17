@@ -1,21 +1,18 @@
-from typing import Annotated, Literal
+from typing import Literal
 from uuid import UUID, uuid4
 
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
-from fastapi import Depends, HTTPException, Request, status
-from sqlmodel import Session, select
+from fastapi import HTTPException, Request, status
+from sqlmodel import select
 
-from app.database import get_database_session
+from app.dependencies import DBSession
 from app.models import Admin, Alum, RefreshToken
 from app.services.token import decode_token, encode_token
 from app.settings import settings
 
 argon2id_hasher = PasswordHasher()
-# Defined here instead of imported from app.dependencies to avoid the circular
-# import (dependencies imports the get_current_* callables from this module).
-DBSession = Annotated[Session, Depends(get_database_session)]
 
 
 def hash_password(plain_password: str) -> str:
