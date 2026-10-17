@@ -5,9 +5,8 @@ import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from fastapi import HTTPException, Request, status
-from sqlmodel import select
+from sqlmodel import Session, select
 
-from app.dependencies import DBSession
 from app.models import Admin, Alum, RefreshToken
 from app.services.token import decode_token, encode_token
 from app.settings import settings
@@ -93,7 +92,7 @@ def _get_uuid_from_token(token: str) -> UUID:
 
 def get_current_alum(
     request: Request,
-    database_session: DBSession,
+    database_session: Session,
 ) -> Alum:
     token = request.cookies.get(settings.alum_access_token)
     if not token:
@@ -124,7 +123,7 @@ def get_current_alum(
 
 def get_current_admin(
     request: Request,
-    database_session: DBSession,
+    database_session: Session,
 ) -> Admin:
     token = request.cookies.get(settings.admin_access_token)
     if not token:
@@ -149,7 +148,7 @@ def get_current_admin(
 
 
 def get_refresh_token_record(
-    request: Request, database_session: DBSession, entity: Literal["alum", "admin"]
+    request: Request, database_session: Session, entity: Literal["alum", "admin"]
 ) -> RefreshToken:
     key = (
         settings.alum_refresh_token
