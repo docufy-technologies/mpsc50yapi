@@ -100,7 +100,14 @@ def get_current_alum(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Login Token was not provided",
         )
-    token_type = decode_token(token).get("type")
+    try:
+        payload = decode_token(token)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token",
+        ) from e
+    token_type = payload.get("type")
     if not token_type or token_type != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -131,7 +138,14 @@ def get_current_admin(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Login Token was not provided",
         )
-    token_type = decode_token(token).get("type")
+    try:
+        payload = decode_token(token)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token",
+        ) from e
+    token_type = payload.get("type")
     if not token_type or token_type != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -161,14 +175,14 @@ def get_refresh_token_record(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh Token was not provided",
         )
-    token_type = decode_token(token).get("type")
-    if not token_type or token_type != "refresh":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token type. Expected refresh token.",
-        )
     try:
         payload = decode_token(token)
+        token_type = decode_token(token).get("type")
+        if not token_type or token_type != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type. Expected refresh token.",
+            )
         jti: str | None = payload.get("jti")
         if not jti:
             raise HTTPException(
