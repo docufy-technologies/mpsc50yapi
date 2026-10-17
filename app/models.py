@@ -196,23 +196,8 @@ class RefreshToken(SQLModel, table=True):
     __tablename__ = "refresh_tokens"  # type: ignore[assignment]
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    alum_uuid: UUID = Field(
-        foreign_key="alumni.uuid", ondelete="CASCADE", index=True
-    )
-    refresh_token_jti: str = Field(unique=True, index=True)
-    created_at: datetime = Field(default_factory=now)
-    expires_at: datetime
-    revoked: bool = Field(default=False)
-
-
-class AdminRefreshToken(SQLModel, table=True):
-    __tablename__ = "admin_refresh_tokens"  # type: ignore[assignment]
-
-    uuid: UUID = Field(default_factory=uuid4, primary_key=True)
-    admin_uuid: UUID = Field(
-        foreign_key="admins.uuid", ondelete="CASCADE", index=True
-    )
-    refresh_token_jti: str = Field(unique=True, index=True)
-    created_at: datetime = Field(default_factory=now)
+    jti: str = Field(unique=True, index=True)
+    entity_uuid: UUID = Field(index=True)
+    created_at: datetime  # no default factory, should be inserted while object creation
     expires_at: datetime
     revoked: bool = Field(default=False)

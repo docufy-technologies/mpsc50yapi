@@ -1,6 +1,6 @@
-from datetime import timedelta, timezone
+from datetime import UTC
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import jwt
 from fastapi import APIRouter, HTTPException, Request, status
@@ -25,12 +25,14 @@ from app.schemas.alumni import (
     WorkProfileInformation,
 )
 from app.schemas.auth import AlumLogin, PasswordUpdate
-from app.services.auth import hash_password, verify_password
-from app.services.token import (
-    decode_token,
-    encode_access_token,
-    encode_refresh_token,
+from app.services.auth import (
+    encode_alum_access_token,
+    encode_alum_refresh_token,
+    get_refresh_token_record,
+    hash_password,
+    verify_password,
 )
+from app.services.token import decode_token
 from app.settings import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication Routes"])
@@ -143,36 +145,17 @@ def register(data: AlumRegister, database_session: DBSession):
 
     # Registration sets the cookie too: the flow is register -> pay -> approval,
     # so a pending alum must be able to reach /payments/initiate without logging in.
-    access_token = encode_access_token({"uuid": str(alum.uuid)})
-
-    refresh_jti = str(uuid4())
-    refresh_token = encode_refresh_token({"uuid": str(alum.uuid)}, refresh_jti)
-    database_session.add(
-        RefreshToken(
-            alum_uuid=alum.uuid,
-            refresh_token_jti=refresh_jti,
-            created_at=now(),
-            expires_at=now()
-            + timedelta(seconds=settings.alum_refresh_token_ttl_seconds),
-            revoked=False,
-        )
-    )
+    access_token = encode_alum_access_token(alum)
+    refresh_token, refresh_token_record = encode_alum_refresh_token(alum)
+    database_session.add(refresh_token_record)
     database_session.commit()
-
     response_data = _alum_information(alum, database_session)
-
     response = JSONResponse(
         status_code=status.HTTP_201_CREATED,
         content=response_data.model_dump(mode="json"),
     )
-    response.set_cookie(
-        **settings.access_token_config(access_token, settings.access_token_ttl_seconds)
-    )
-    response.set_cookie(
-        **settings.refresh_token_config(
-            refresh_token, settings.alum_refresh_token_ttl_seconds
-        )
-    )
+    response.set_cookie(**settings.access_token_cookie_param(access_token, "alum"))
+    response.set_cookie(**settings.refresh_token_cookie_param(refresh_token, "alum"))
     return response
 
 
@@ -194,62 +177,34 @@ def login(cred: AlumLogin, database_session: DBSession):
             detail="Account is not active",
         )
 
-    access_token = encode_access_token({"uuid": str(alum.uuid)})
-
-    refresh_jti = str(uuid4())
-    refresh_token = encode_refresh_token({"uuid": str(alum.uuid)}, refresh_jti)
-    database_session.add(
-        RefreshToken(
-            alum_uuid=alum.uuid,
-            refresh_token_jti=refresh_jti,
-            created_at=now(),
-            expires_at=now()
-            + timedelta(seconds=settings.alum_refresh_token_ttl_seconds),
-            revoked=False,
-        )
-    )
+    access_token = encode_alum_access_token(alum)
+    refresh_token, refresh_token_record = encode_alum_refresh_token(alum)
+    database_session.add(refresh_token_record)
     database_session.commit()
-
     response_data = _alum_information(alum, database_session)
-
     response = JSONResponse(
         status_code=status.HTTP_200_OK,
         content=response_data.model_dump(mode="json"),
     )
-    response.set_cookie(
-        **settings.access_token_config(access_token, settings.access_token_ttl_seconds)
-    )
-    response.set_cookie(
-        **settings.refresh_token_config(
-            refresh_token, settings.alum_refresh_token_ttl_seconds
-        )
-    )
+    response.set_cookie(**settings.access_token_cookie_param(access_token, "alum"))
+    response.set_cookie(**settings.refresh_token_cookie_param(refresh_token, "alum"))
     return response
 
 
 @router.post("/logout", summary="Log out the current alum")
 def logout(request: Request, database_session: DBSession):
-    refresh_token = request.cookies.get(settings.refresh_token_name)
-    if refresh_token:
-        try:
-            payload = decode_token(refresh_token, verify_exp=False)
-            jti = payload.get("jti")
-            if jti:
-                record = database_session.scalar(
-                    select(RefreshToken).where(RefreshToken.refresh_token_jti == jti)
-                )
-                if record and not record.revoked:
-                    record.revoked = True
-                    database_session.add(record)
-                    database_session.commit()
-        except (jwt.InvalidTokenError, ValueError, TypeError):
-            pass
+    detail = "Logged out successfully"
+    try:
+        record = get_refresh_token_record(request, database_session, "alum")
+        record.revoked = True
+        database_session.add(record)
+        database_session.commit()
+    except HTTPException as e:
+        detail = e.detail
 
-    response = JSONResponse(
-        status_code=status.HTTP_200_OK, content={"message": "Logged out successfully"}
-    )
-    response.delete_cookie(**settings.delete_cookie_config(settings.access_token_name))
-    response.delete_cookie(**settings.delete_cookie_config(settings.refresh_token_name))
+    response = JSONResponse(status_code=status.HTTP_200_OK, content={"message": detail})
+    response.delete_cookie(**settings.access_token_cookie_deletion_param("alum"))
+    response.delete_cookie(**settings.refresh_token_cookie_deletion_param("alum"))
     return response
 
 
@@ -258,112 +213,50 @@ def logout(request: Request, database_session: DBSession):
     summary="Refresh the current alum's access token",
 )
 def refresh_access_token(request: Request, database_session: DBSession):
-    refresh_token = request.cookies.get(settings.refresh_token_name)
-    if not refresh_token:
+    record = get_refresh_token_record(request, database_session, "alum")
+
+    if record.revoked:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token provided"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Refresh token revoked"
         )
 
-    try:
-        payload = decode_token(refresh_token)
-        uuid_str: str | None = payload.get("uuid")
-        jti: str | None = payload.get("jti")
-        token_type: str | None = payload.get("type")
-
-        if not uuid_str or not jti or token_type != "refresh":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid refresh token payload",
-            )
-
-        alum = database_session.scalar(
-            select(Alum).where(Alum.uuid == UUID(uuid_str), Alum.status != "cancelled")
-        )
-        if not alum:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
-            )
-
-        db_refresh_token = database_session.scalar(
-            select(RefreshToken).where(
-                RefreshToken.alum_uuid == alum.uuid,
-                RefreshToken.refresh_token_jti == jti,
-            )
-        )
-        if not db_refresh_token:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Refresh token not found"
-            )
-
-        if db_refresh_token.revoked:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Refresh token revoked"
-            )
-
-        expires_at = db_refresh_token.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if expires_at < now():
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Refresh token expired"
-            )
-
-        # Revoke old token
-        db_refresh_token.revoked = True
-        database_session.add(db_refresh_token)
-
-        # Issue new access + refresh tokens
-        new_access_token = encode_access_token({"uuid": uuid_str})
-
-        new_jti = str(uuid4())
-        new_refresh_token = encode_refresh_token({"uuid": uuid_str}, new_jti)
-
-        new_db_token = RefreshToken(
-            alum_uuid=alum.uuid,
-            refresh_token_jti=new_jti,
-            created_at=now(),
-            expires_at=now()
-            + timedelta(seconds=settings.alum_refresh_token_ttl_seconds),
-            revoked=False,
-        )
-        database_session.add(new_db_token)
-        database_session.commit()
-
-        response = JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={"message": "Token refreshed successfully"},
-        )
-        response.set_cookie(
-            **settings.access_token_config(
-                new_access_token, settings.access_token_ttl_seconds
-            )
-        )
-        response.set_cookie(
-            **settings.refresh_token_config(
-                new_refresh_token, settings.alum_refresh_token_ttl_seconds
-            )
-        )
-        return response
-
-    except HTTPException:
-        raise
-    except jwt.ExpiredSignatureError:
+    expires_at = record.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at < now():
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token has expired"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Refresh token expired"
         )
-    except jwt.InvalidTokenError:
+
+    alum = database_session.get(Alum, record.entity_uuid)
+    if not alum or alum.status == "cancelled":
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
         )
-    except (jwt.InvalidTokenError, ValueError, TypeError) as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
-        ) from e
+
+    # Revoke the old record and issue a fresh access + refresh pair.
+    record.revoked = True
+    database_session.add(record)
+
+    new_access_token = encode_alum_access_token(alum)
+    new_refresh_token, new_record = encode_alum_refresh_token(alum)
+    database_session.add(new_record)
+    database_session.commit()
+
+    response = JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"message": "Token refreshed successfully"},
+    )
+    response.set_cookie(**settings.access_token_cookie_param(new_access_token, "alum"))
+    response.set_cookie(
+        **settings.refresh_token_cookie_param(new_refresh_token, "alum")
+    )
+    return response
 
 
 @router.get("/verify-token", summary="Verify the validity of an access token")
 def verify_token(request: Request, database_session: DBSession) -> dict[str, Any]:
-    access_token = request.cookies.get(settings.access_token_name)
+    access_token = request.cookies.get(settings.alum_access_token)
     if not access_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized"
@@ -443,7 +336,7 @@ def update_alum_password(
 
     tokens = database_session.scalars(
         select(RefreshToken).where(
-            RefreshToken.alum_uuid == alum.uuid, RefreshToken.revoked == False
+            RefreshToken.entity_uuid == alum.uuid, RefreshToken.revoked == False
         )
     ).all()
     for token in tokens:
