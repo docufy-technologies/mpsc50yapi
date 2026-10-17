@@ -1,7 +1,9 @@
 from typing import cast
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+import jwt
+
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlmodel import case, col, func, select
 
@@ -24,10 +26,18 @@ from app.schemas.alumni import (
 from app.schemas.auth import AdminInfo, AdminLogin, AdminSession
 from app.schemas.payment import PaymentSummary
 from app.schemas.referrals import ReferralDrillDown, ReferralLeaderboardEntry
+from datetime import timedelta, timezone
+from uuid import uuid4
+
+from app.helper import now
+from app.models import AdminRefreshToken
 from app.services.admin import encode_admin_token
 from app.services.auth import verify_password
 from app.services.referral_queries import referrals_for
-from app.services.token import ADMIN_TOKEN_TTL_SECONDS
+from app.services.token import (
+    decode_token,
+    encode_refresh_token,
+)
 from app.settings import settings
 from app.types import AccountStatus, PaymentStatus
 
@@ -53,14 +63,33 @@ def admin_login(credentials: AdminLogin, database_session: DBSession) -> JSONRes
             detail="Invalid admin credentials",
         )
 
+    admin_access_token = encode_admin_token(admin.uuid)
+
+    refresh_jti = str(uuid4())
+    refresh_token = encode_refresh_token(
+        {"admin_uuid": str(admin.uuid), "admin": True}, refresh_jti,
+        expiry_seconds=settings.admin_refresh_token_ttl_seconds,
+    )
+    database_session.add(
+        AdminRefreshToken(
+            admin_uuid=admin.uuid,
+            refresh_token_jti=refresh_jti,
+            created_at=now(),
+            expires_at=now() + timedelta(seconds=settings.admin_refresh_token_ttl_seconds),
+            revoked=False,
+        )
+    )
+    database_session.commit()
+
     response = JSONResponse(
         status_code=status.HTTP_200_OK,
-        content=AdminSession(expires_in=ADMIN_TOKEN_TTL_SECONDS).model_dump(),
+        content=AdminSession(expires_in=settings.admin_access_token_ttl_seconds).model_dump(),
     )
     response.set_cookie(
-        **settings.admin_access_token_config(
-            encode_admin_token(admin.uuid), ADMIN_TOKEN_TTL_SECONDS
-        )
+        **settings.admin_access_token_config(admin_access_token, settings.admin_access_token_ttl_seconds)
+    )
+    response.set_cookie(
+        **settings.admin_refresh_token_config(refresh_token, settings.admin_refresh_token_ttl_seconds)
     )
     return response
 
@@ -69,14 +98,140 @@ def admin_login(credentials: AdminLogin, database_session: DBSession) -> JSONRes
     "/logout",
     summary="Clear the admin session cookie",
 )
-def admin_logout() -> JSONResponse:
+def admin_logout(request: Request, database_session: DBSession) -> JSONResponse:
+    refresh_token = request.cookies.get(settings.admin_refresh_token_name)
+    if refresh_token:
+        try:
+            payload = decode_token(refresh_token, verify_exp=False)
+            jti = payload.get("jti")
+            if jti:
+                record = database_session.scalar(
+                    select(AdminRefreshToken).where(
+                        AdminRefreshToken.refresh_token_jti == jti
+                    )
+                )
+                if record and not record.revoked:
+                    record.revoked = True
+                    database_session.add(record)
+                    database_session.commit()
+        except Exception:
+            pass
+
     response = JSONResponse(
         status_code=status.HTTP_200_OK, content={"message": "Admin logged out"}
     )
     response.delete_cookie(
         **settings.delete_cookie_config(settings.admin_access_token_name)
     )
+    response.delete_cookie(
+        **settings.delete_cookie_config(settings.admin_refresh_token_name)
+    )
     return response
+
+
+@router.post(
+    "/refresh-token",
+    summary="Refresh the current admin's access token",
+)
+def refresh_admin_access_token(request: Request, database_session: DBSession):
+    refresh_token = request.cookies.get(settings.admin_refresh_token_name)
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No refresh token provided",
+        )
+
+    try:
+        payload = decode_token(refresh_token)
+        admin_uuid_str: str | None = payload.get("admin_uuid")
+        jti: str | None = payload.get("jti")
+        token_type: str | None = payload.get("type")
+
+        if not admin_uuid_str or not jti or token_type != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token payload",
+            )
+
+        admin = database_session.scalar(
+            select(Admin).where(Admin.uuid == UUID(admin_uuid_str), Admin.is_active == True)
+        )
+        if not admin:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
+            )
+
+        db_refresh_token = database_session.scalar(
+            select(AdminRefreshToken).where(
+                AdminRefreshToken.admin_uuid == admin.uuid,
+                AdminRefreshToken.refresh_token_jti == jti,
+            )
+        )
+        if not db_refresh_token:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Refresh token not found"
+            )
+
+        if db_refresh_token.revoked:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Refresh token revoked"
+            )
+
+        expires_at = db_refresh_token.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < now():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Refresh token expired"
+            )
+
+        db_refresh_token.revoked = True
+        database_session.add(db_refresh_token)
+
+        new_access_token = encode_admin_token(admin.uuid)
+
+        new_jti = str(uuid4())
+        new_refresh_token = encode_refresh_token(
+            {"admin_uuid": str(admin.uuid), "admin": True}, new_jti,
+            expiry_seconds=settings.admin_refresh_token_ttl_seconds,
+        )
+
+        new_db_token = AdminRefreshToken(
+            admin_uuid=admin.uuid,
+            refresh_token_jti=new_jti,
+            created_at=now(),
+            expires_at=now() + timedelta(seconds=settings.admin_refresh_token_ttl_seconds),
+            revoked=False,
+        )
+        database_session.add(new_db_token)
+        database_session.commit()
+
+        response = JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={"message": "Token refreshed successfully"},
+        )
+        response.set_cookie(
+            **settings.admin_access_token_config(new_access_token, settings.admin_access_token_ttl_seconds)
+        )
+        response.set_cookie(
+            **settings.admin_refresh_token_config(new_refresh_token, settings.admin_refresh_token_ttl_seconds)
+        )
+        return response
+
+    except HTTPException:
+        raise
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token has expired"
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+        ) from e
 
 
 @router.get(
