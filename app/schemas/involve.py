@@ -11,7 +11,6 @@ from pydantic import (
     model_validator,
 )
 
-from app.constants import SUBCOMMITTEE_NAMES
 from app.settings import settings
 from app.types import ApplicationStatus, StallFeeStatus, SubmissionStatus
 
@@ -25,14 +24,14 @@ class SubcommitteeApplicationInput(BaseModel):
     @field_validator("first_choice")
     @classmethod
     def validate_first_choice(cls, value: str) -> str:
-        if value not in SUBCOMMITTEE_NAMES:
+        if value not in settings.subcommittee_names:
             raise ValueError("Invalid sub-committee choice")
         return value
 
     @field_validator("second_choice")
     @classmethod
     def validate_second_choice(cls, value: str | None) -> str | None:
-        if value is not None and value not in SUBCOMMITTEE_NAMES:
+        if value is not None and value not in settings.subcommittee_names:
             raise ValueError("Invalid sub-committee choice")
         return value
 

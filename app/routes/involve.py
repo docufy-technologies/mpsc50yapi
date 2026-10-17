@@ -3,7 +3,6 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import col, select
 
-from app.constants import SUBCOMMITTEE_NAMES
 from app.dependencies import CurrentAlum, DBSession
 from app.helper import now
 from app.models import (
@@ -146,7 +145,7 @@ def read_my_sponsor_offers(
 
 @router.get("/subcommittee/options", response_model=list[str])
 def subcommittee_options() -> list[str]:
-    return SUBCOMMITTEE_NAMES
+    return sorted(settings.subcommittee_names)
 
 
 @router.post(
