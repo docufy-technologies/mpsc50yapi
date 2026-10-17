@@ -1,6 +1,9 @@
 from uuid import UUID
 
+import jwt
+
 from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from fastapi import HTTPException, Request, status
 from sqlmodel import select
 
@@ -19,7 +22,7 @@ def hash_password(plain_password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return argon2id_hasher.verify(hashed_password, plain_password)
-    except Exception:
+    except (VerifyMismatchError, InvalidHashError):
         return False
 
 
@@ -36,7 +39,7 @@ def _get_uuid_from_token(token: str) -> UUID:
         return UUID(uuid_str)
     except HTTPException:
         raise
-    except Exception as e:
+    except (jwt.InvalidTokenError, ValueError, TypeError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access token"
         ) from e
