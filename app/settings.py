@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     )
 
     database_uri: str = Field(..., validation_alias="DATABASE_URI")
-    jwt_private_key: str = Field(..., validation_alias="JWT_SECRET_KEY")
+    jwt_private_key: str = Field(..., validation_alias="JWT_PRIVATE_KEY")
     jwt_public_key: str = Field(..., validation_alias="JWT_PUBLIC_KEY")
     jwt_algorithm: str = Field(..., validation_alias="JWT_ALGORITHM")
     alum_access_token: str = Field(..., validation_alias="ALUM_ACCESS_TOKEN_NAME")
