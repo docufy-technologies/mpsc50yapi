@@ -6,21 +6,42 @@ import jwt
 from app.helper import now
 from app.settings import settings
 
-ACCESS_TOKEN_TTL_SECONDS: int = 60 * 60 * 24
-# Admins approve and leave; they do not browse. Shorter than an alum session.
-ADMIN_TOKEN_TTL_SECONDS: int = 60 * 60 * 8
-# Grace period after expiry during which /auth/refresh-token still accepts a token.
-REFRESH_WINDOW_SECONDS: int = 60 * 60 * 24 * 7
-
-
 def encode_access_token(
-    data: dict[str, Any], expiry_seconds: int = ACCESS_TOKEN_TTL_SECONDS
+    data: dict[str, Any], expiry_seconds: int | None = None
 ) -> str:
+    if expiry_seconds is None:
+        expiry_seconds = settings.access_token_ttl_seconds
     issued_at = now()
     expires_at = issued_at + timedelta(seconds=expiry_seconds)
 
     payload: dict[str, Any] = {
         **data,
+        "iat": int(issued_at.timestamp()),
+        "exp": int(expires_at.timestamp()),
+    }
+    payload.setdefault("type", "access")
+
+    return jwt.encode(
+        payload=payload,
+        key=settings.jwt_private_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
+def encode_refresh_token(
+    data: dict[str, Any],
+    jti: str,
+    expiry_seconds: int | None = None,
+) -> str:
+    if expiry_seconds is None:
+        expiry_seconds = settings.alum_refresh_token_ttl_seconds
+    issued_at = now()
+    expires_at = issued_at + timedelta(seconds=expiry_seconds)
+
+    payload: dict[str, Any] = {
+        **data,
+        "jti": jti,
+        "type": "refresh",
         "iat": int(issued_at.timestamp()),
         "exp": int(expires_at.timestamp()),
     }

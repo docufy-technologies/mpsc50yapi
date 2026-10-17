@@ -20,6 +20,18 @@ class Settings(BaseSettings):
     admin_access_token_name: str = Field(
         default=..., validation_alias="ADMIN_ACCESS_TOKEN_NAME"
     )
+    refresh_token_name: str = Field(
+        default="alum_refresh_token", validation_alias="REFRESH_TOKEN_NAME"
+    )
+    admin_refresh_token_name: str = Field(
+        default="mpsc_admin_refresh_token", validation_alias="ADMIN_REFRESH_TOKEN_NAME"
+    )
+
+    # Hardcoded token lifetimes (seconds).
+    access_token_ttl_seconds: int = 15 * 60
+    admin_access_token_ttl_seconds: int = 15 * 60
+    admin_refresh_token_ttl_seconds: int = 30 * 60
+    alum_refresh_token_ttl_seconds: int = 60 * 60 * 24 * 7
 
     domain: str = Field(default=..., validation_alias="COOKIE_DOMAIN")
     frontend_url: str = Field(
@@ -59,7 +71,7 @@ class Settings(BaseSettings):
         self.alumni_pfp_path.mkdir(parents=True, exist_ok=True)
         return self.media_dir / self.alumni_pfp_dir / filename
 
-    max_allowed_dimention: int = 1000
+    max_allowed_dimension: int = 1000
     allowed_image_mime_types: set[str] = {
         "image/jpeg",
         "image/png",
@@ -94,6 +106,16 @@ class Settings(BaseSettings):
     ) -> dict[str, Any]:
         return self._cookie_config(
             self.admin_access_token_name, admin_access_token, max_age
+        )
+
+    def refresh_token_config(self, refresh_token: str, max_age: int) -> dict[str, Any]:
+        return self._cookie_config(self.refresh_token_name, refresh_token, max_age)
+
+    def admin_refresh_token_config(
+        self, admin_refresh_token: str, max_age: int
+    ) -> dict[str, Any]:
+        return self._cookie_config(
+            self.admin_refresh_token_name, admin_refresh_token, max_age
         )
 
     def delete_cookie_config(self, key: str) -> dict[str, Any]:
