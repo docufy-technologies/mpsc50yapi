@@ -1,17 +1,21 @@
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlmodel import Session, select
 
+from app.database import get_database_session
 from app.models import Admin, Alum, RefreshToken
 from app.services.token import decode_token, encode_token
 from app.settings import settings
 
 argon2id_hasher = PasswordHasher()
+# Defined here instead of imported from app.dependencies to avoid the circular
+# import (dependencies imports the get_current_* callables from this module).
+DBSession = Annotated[Session, Depends(get_database_session)]
 
 
 def hash_password(plain_password: str) -> str:
@@ -92,7 +96,7 @@ def _get_uuid_from_token(token: str) -> UUID:
 
 def get_current_alum(
     request: Request,
-    database_session: Session,
+    database_session: DBSession,
 ) -> Alum:
     token = request.cookies.get(settings.alum_access_token)
     if not token:
@@ -130,7 +134,7 @@ def get_current_alum(
 
 def get_current_admin(
     request: Request,
-    database_session: Session,
+    database_session: DBSession,
 ) -> Admin:
     token = request.cookies.get(settings.admin_access_token)
     if not token:
@@ -153,7 +157,7 @@ def get_current_admin(
         )
     uuid = _get_uuid_from_token(token)
     admin = database_session.get(Admin, uuid)
-    if not admin or admin.is_active:
+    if not admin or not admin.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Admin not found"
         )
@@ -162,7 +166,7 @@ def get_current_admin(
 
 
 def get_refresh_token_record(
-    request: Request, database_session: Session, entity: Literal["alum", "admin"]
+    request: Request, database_session: DBSession, entity: Literal["alum", "admin"]
 ) -> RefreshToken:
     key = (
         settings.alum_refresh_token
