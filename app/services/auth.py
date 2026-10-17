@@ -116,7 +116,7 @@ def get_current_alum(
     if alum.status == "cancelled":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You cannor perform any operation because your account has been cancelled",
+            detail="You cannot perform any operation because your account has been cancelled",
         )
 
     return alum
@@ -140,7 +140,7 @@ def get_current_admin(
         )
     uuid = _get_uuid_from_token(token)
     admin = database_session.get(Admin, uuid)
-    if not admin:
+    if not admin or admin.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Admin not found"
         )
