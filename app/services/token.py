@@ -6,9 +6,8 @@ import jwt
 from app.helper import now
 from app.settings import settings
 
-def encode_access_token(
-    data: dict[str, Any], expiry_seconds: int | None = None
-) -> str:
+
+def encode_access_token(data: dict[str, Any], expiry_seconds: int | None = None) -> str:
     if expiry_seconds is None:
         expiry_seconds = settings.access_token_ttl_seconds
     issued_at = now()
@@ -61,5 +60,3 @@ def decode_token(token: str, verify_exp: bool = True) -> dict[str, Any]:
         leeway=30,
         options={"verify_exp": verify_exp},
     )
-
-

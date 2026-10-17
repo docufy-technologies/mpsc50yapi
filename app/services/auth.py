@@ -1,7 +1,6 @@
 from uuid import UUID
 
 import jwt
-
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from fastapi import HTTPException, Request, status
