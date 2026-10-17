@@ -6,16 +6,16 @@ from sqlmodel import select
 from app.dependencies import DBSession
 from app.models import Admin
 from app.services.token import (
-    ADMIN_TOKEN_TTL_SECONDS,
     decode_token,
     encode_access_token,
 )
+from app.settings import settings
 
 
 def encode_admin_token(admin_uuid: UUID) -> str:
     return encode_access_token(
         {"admin": True, "admin_uuid": str(admin_uuid)},
-        expiry_seconds=ADMIN_TOKEN_TTL_SECONDS,
+        expiry_seconds=settings.admin_access_token_ttl_seconds,
     )
 
 
