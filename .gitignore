@@ -194,3 +194,4 @@ tmp*
 alembic/
 alembic*
 requirements.txt
+.env.production

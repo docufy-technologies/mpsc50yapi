@@ -40,6 +40,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
         "https://mpsc50years.docufybd.com",
         "http://mpsc50years.docufybd.com",
     ],

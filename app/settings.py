@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     image_upload_size_cap_bytes: int = 5 * 1024 * 1024  # 5MB
 
     dev_mode: bool = Field(default=False, validation_alias="DEV_MODE")
+
+    @model_validator(mode="after")
+    def apply_dev_mode_urls(self) -> "Settings":
+        if self.dev_mode:
+            self.frontend_url = "http://localhost:3000"
+            self.app_url = "http://localhost:8000"
+        return self
 
     def _cookie_param(
         self, key: str, value: str, max_age: int | None
