@@ -70,10 +70,10 @@ def _settle_payment(
 ) -> Payment:
     """Apply a reconciliation outcome to the payment row.
 
-    When the payment is valid, a unique ``reg_code`` is assigned to the
-    alum's profile (if not already set).  The code is only generated once
-    payment clears so that every ``reg_code`` in the system represents a
-    paid registration.
+    When the payment is valid, the payment is completed and the linked alum's
+    account is confirmed. A unique ``reg_code`` is also assigned to the alum's
+    profile (if not already set). These changes are committed together so the
+    account cannot be confirmed without a completed payment.
     """
     payment.status = "completed" if outcome.is_valid else "failed"
 
@@ -88,8 +88,10 @@ def _settle_payment(
         )
         if link and link.alum_uuid:
             alum_record = database_session.get(Alum, link.alum_uuid)
-            if alum_record and not alum_record.reg_code:
-                alum_record.reg_code = generate_reg_code(database_session)
+            if alum_record:
+                alum_record.status = "confirmed"
+                if not alum_record.reg_code:
+                    alum_record.reg_code = generate_reg_code(database_session)
                 database_session.add(alum_record)
 
     database_session.add(payment)
