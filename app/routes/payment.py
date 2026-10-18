@@ -141,14 +141,9 @@ async def initiate_payment(
         .where(col(AlumniPayment.alum_uuid) == alum.uuid)
     ).all()
 
-    if any(payment.status == "completed" for payment in existing_payments):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Payment for this alum is already completed",
-        )
-
     # Only `unpaid` is reusable. A `failed` payment may still have gateway
-    # records, so a retry gets a fresh reference.
+    # records, and completed payments represent separate allowed payments, so
+    # those attempts get a fresh reference.
     reusable = next(
         (payment for payment in existing_payments if payment.status == "unpaid"),
         None,
