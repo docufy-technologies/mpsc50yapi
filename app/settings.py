@@ -1,8 +1,12 @@
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+DeadlineKey = Literal["registration", "stall", "sponsor", "subcommittee", "openmic"]
 
 
 class Settings(BaseSettings):
@@ -60,6 +64,13 @@ class Settings(BaseSettings):
     sponsor_offer_limit: int = 3
     openmic_entry_limit: int = 2
     openmic_max_duration_minutes: int = 10
+    event_deadlines: dict[DeadlineKey, datetime] = {
+        "registration": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC),
+        "stall": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC),
+        "sponsor": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC),
+        "subcommittee": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC),
+        "openmic": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC),
+    }
 
     media_dir: Path = Path("media")
 

@@ -32,6 +32,7 @@ from app.services.auth import (
     hash_password,
     verify_password,
 )
+from app.services.deadlines import ensure_open
 from app.services.payment import payment_summary
 from app.services.token import decode_token
 from app.settings import settings
@@ -98,6 +99,7 @@ def _alum_information(alum: Alum, database_session: Session) -> AlumInformation:
     ),
 )
 def register(data: AlumRegister, database_session: DBSession):
+    ensure_open("registration")
     email = data.email.lower()
     if database_session.scalar(select(Alum).where(Alum.email == email)):
         raise HTTPException(

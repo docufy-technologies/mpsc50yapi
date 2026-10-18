@@ -8,15 +8,6 @@ from app.helper import now
 from app.settings import settings
 
 
-class EventDeadline(SQLModel, table=True):
-    __tablename__ = "event_deadlines"  # type: ignore[assignment]
-
-    key: str = Field(primary_key=True)
-    label: str
-    deadline_at: datetime
-    is_extended: bool = False
-
-
 class Alum(SQLModel, table=True):
     __tablename__ = "alumni"  # type: ignore[assignment]
 
