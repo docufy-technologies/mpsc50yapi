@@ -102,7 +102,7 @@ async def create_payment_session(
     )
 
 
-async def validate_transaction(transaction_reference: str) -> dict[str, Any]:
+async def validate_transaction(validation_id: str) -> dict[str, Any]:
 
     store_id, store_password = _require_credentials()
 
@@ -111,7 +111,7 @@ async def validate_transaction(transaction_reference: str) -> dict[str, Any]:
             response = await client.get(
                 f"{_base_url()}/validator/api/validationserverAPI.php",
                 params={
-                    "val_id": f"{store_id}-{transaction_reference}",
+                    "val_id": validation_id,
                     "store_id": store_id,
                     "store_passwd": store_password,
                     "format": "json",

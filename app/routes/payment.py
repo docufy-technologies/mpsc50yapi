@@ -102,7 +102,9 @@ def _settle_payment(
 
 
 async def _reconcile(
-    database_session: DBSession, transaction_reference: str
+    database_session: DBSession,
+    transaction_reference: str,
+    validation_id: str,
 ) -> tuple[Payment, ValidationOutcome]:
     """Verify a payment against the gateway. Shared by callback and IPN."""
     payment = database_session.scalar(
@@ -113,7 +115,7 @@ async def _reconcile(
             status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found"
         )
 
-    validation = await validate_transaction(transaction_reference)
+    validation = await validate_transaction(validation_id)
     outcome = reconcile_validation(
         validation,
         expected_reference=transaction_reference,
@@ -244,6 +246,7 @@ async def payment_callback(
     anything."""
     form = await request.form()
     transaction_reference = str(form.get("tran_id") or "")
+    validation_id = str(form.get("val_id") or "")
     frontend = settings.frontend_url
 
     if not transaction_reference:
@@ -251,9 +254,16 @@ async def payment_callback(
             f"{frontend}/payment/cancelled?reason=missing_reference",
             status_code=status.HTTP_303_SEE_OTHER,
         )
+    if not validation_id:
+        return RedirectResponse(
+            f"{frontend}/payment/cancelled?reason=missing_validation_id",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
     try:
-        payment, outcome = await _reconcile(database_session, transaction_reference)
+        payment, outcome = await _reconcile(
+            database_session, transaction_reference, validation_id
+        )
     except HTTPException as e:
         # 404 from an unknown reference, 503 from unconfigured gateway.
         return RedirectResponse(
@@ -288,10 +298,13 @@ async def payment_ipn(
     """
     form = await request.form()
     transaction_reference = str(form.get("tran_id") or "")
+    validation_id = str(form.get("val_id") or "")
     status_from_gateway = str(form.get("status") or "")
 
     if not transaction_reference:
         return {"received": False, "reason": "missing transaction reference"}
+    if not validation_id:
+        return {"received": False, "reason": "missing validation id"}
 
     payment = database_session.scalar(
         select(Payment).where(Payment.transaction_reference == transaction_reference)
@@ -312,7 +325,9 @@ async def payment_ipn(
         }
 
     try:
-        payment, outcome = await _reconcile(database_session, transaction_reference)
+        payment, outcome = await _reconcile(
+            database_session, transaction_reference, validation_id
+        )
     except HTTPException as e:
         return {"received": True, "status": payment.status, "error": e.detail}
 
