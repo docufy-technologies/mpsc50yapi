@@ -32,6 +32,7 @@ from app.services.auth import (
     hash_password,
     verify_password,
 )
+from app.services.payment import payment_summary
 from app.services.token import decode_token
 from app.settings import settings
 
@@ -78,6 +79,7 @@ def _alum_information(alum: Alum, database_session: Session) -> AlumInformation:
         status=alum.status,
         created_at=alum.created_at,
         profile=profile_information,
+        payment=payment_summary(alum.uuid, database_session),
         acquaintances=[
             AcquaintanceInformation.model_validate(acquaintance, from_attributes=True)
             for acquaintance in acquaintances

@@ -1,10 +1,9 @@
 from datetime import UTC
-from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
-from sqlmodel import case, col, func, select
+from sqlmodel import col, func, select
 
 from app.dependencies import CurrentAdmin, DBSession
 from app.helper import now
@@ -12,8 +11,6 @@ from app.models import (
     Acquaintance,
     Admin,
     Alum,
-    AlumniPayment,
-    Payment,
     WorkProfile,
 )
 from app.schemas.alumni import (
@@ -32,9 +29,10 @@ from app.services.auth import (
     get_refresh_token_record,
     verify_password,
 )
+from app.services.payment import payment_summary
 from app.services.referral_queries import referrals_for
 from app.settings import settings
-from app.types import AccountStatus, PaymentStatus
+from app.types import AccountStatus
 
 router = APIRouter(prefix="/admin", tags=["Administration Routes"])
 
@@ -176,28 +174,7 @@ def _payment_summary(alum_uuid: UUID, database_session: DBSession) -> PaymentSum
     gateway while a failed one keeps its creation time, so ordering on time alone
     can hide a success behind a later failure.
     """
-    payment = database_session.scalar(
-        select(Payment)
-        .join(AlumniPayment, col(AlumniPayment.payment_uuid) == col(Payment.uuid))
-        .where(col(AlumniPayment.alum_uuid) == alum_uuid)
-        .order_by(
-            # completed first, so a later failure cannot hide a success.
-            case((col(Payment.status) == "completed", 0), else_=1),
-            col(Payment.paid_at).desc(),
-        )
-        .limit(1)
-    )
-
-    if not payment:
-        return PaymentSummary()
-
-    return PaymentSummary(
-        has_paid=payment.status == "completed",
-        latest_status=cast(PaymentStatus, payment.status),
-        amount=payment.amount,
-        transaction_reference=payment.transaction_reference,
-        paid_at=payment.paid_at,
-    )
+    return payment_summary(alum_uuid, database_session)
 
 
 @router.get("/referrals", response_model=list[ReferralLeaderboardEntry])
