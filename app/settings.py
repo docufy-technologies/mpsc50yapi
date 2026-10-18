@@ -5,7 +5,6 @@ from typing import Any, Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 DeadlineKey = Literal["registration", "stall", "sponsor", "subcommittee", "openmic"]
 
 
