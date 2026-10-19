@@ -49,7 +49,7 @@ def read_my_referrals(alum: CurrentAlum, database_session: DBSession):
 def create_stall_application(
     data: StallApplicationInput, alum: CurrentAlum, database_session: DBSession
 ) -> StallApplication:
-    ensure_open("stall", database_session, now=now)
+    ensure_open("stall")
     existing = database_session.scalar(
         select(StallApplication).where(StallApplication.alum_uuid == alum.uuid)
     )
@@ -83,7 +83,7 @@ def read_my_stall_application(
 def update_my_stall_application(
     data: StallApplicationInput, alum: CurrentAlum, database_session: DBSession
 ) -> StallApplication:
-    ensure_open("stall", database_session, now=now)
+    ensure_open("stall")
     application = database_session.scalar(
         select(StallApplication).where(StallApplication.alum_uuid == alum.uuid)
     )
@@ -113,7 +113,7 @@ def update_my_stall_application(
 def create_sponsor_offer(
     data: SponsorOfferInput, alum: CurrentAlum, database_session: DBSession
 ) -> SponsorOffer:
-    ensure_open("sponsor", database_session, now=now)
+    ensure_open("sponsor")
     count = len(
         database_session.exec(
             select(SponsorOffer).where(SponsorOffer.alum_uuid == alum.uuid)
@@ -158,7 +158,7 @@ def create_subcommittee_application(
     alum: CurrentAlum,
     database_session: DBSession,
 ) -> SubcommitteeApplication:
-    ensure_open("subcommittee", database_session, now=now)
+    ensure_open("subcommittee")
     existing = database_session.scalar(
         select(SubcommitteeApplication).where(
             SubcommitteeApplication.alum_uuid == alum.uuid
@@ -200,7 +200,7 @@ def update_my_subcommittee_application(
     alum: CurrentAlum,
     database_session: DBSession,
 ) -> SubcommitteeApplication:
-    ensure_open("subcommittee", database_session, now=now)
+    ensure_open("subcommittee")
     application = database_session.scalar(
         select(SubcommitteeApplication).where(
             SubcommitteeApplication.alum_uuid == alum.uuid
@@ -234,7 +234,7 @@ def update_my_subcommittee_application(
 def create_openmic_entry(
     data: OpenMicEntryInput, alum: CurrentAlum, database_session: DBSession
 ) -> OpenMicEntry:
-    ensure_open("openmic", database_session, now=now)
+    ensure_open("openmic")
     count = len(
         database_session.exec(
             select(OpenMicEntry).where(OpenMicEntry.alum_uuid == alum.uuid)
@@ -272,7 +272,7 @@ def update_my_openmic_entry(
     alum: CurrentAlum,
     database_session: DBSession,
 ) -> OpenMicEntry:
-    ensure_open("openmic", database_session, now=now)
+    ensure_open("openmic")
     entry = database_session.scalar(
         select(OpenMicEntry).where(
             OpenMicEntry.uuid == entry_uuid,
@@ -296,7 +296,7 @@ def update_my_openmic_entry(
 def delete_my_openmic_entry(
     entry_uuid: UUID, alum: CurrentAlum, database_session: DBSession
 ) -> None:
-    ensure_open("openmic", database_session, now=now)
+    ensure_open("openmic")
     entry = database_session.scalar(
         select(OpenMicEntry).where(
             OpenMicEntry.uuid == entry_uuid,
