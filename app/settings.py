@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -63,12 +63,16 @@ class Settings(BaseSettings):
     sponsor_offer_limit: int = 3
     openmic_entry_limit: int = 2
     openmic_max_duration_minutes: int = 10
+
+    # TODO: Make it editable via connected CRM
     event_deadlines: dict[DeadlineKey, datetime] = {
-        "registration": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC),
-        "stall": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC),
-        "sponsor": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC),
-        "subcommittee": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC),
-        "openmic": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC),
+        "registration": datetime(2026, 11, 11, 23, 59, 59, tzinfo=UTC)
+        + timedelta(hours=6),
+        "stall": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC) + timedelta(hours=6),
+        "sponsor": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC) + timedelta(hours=6),
+        "subcommittee": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC)
+        + timedelta(hours=6),
+        "openmic": datetime(2026, 11, 10, 23, 59, 59, tzinfo=UTC) + timedelta(hours=6),
     }
 
     media_dir: Path = Path("media")
