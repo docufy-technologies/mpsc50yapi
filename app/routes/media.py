@@ -2,11 +2,12 @@ import io
 
 from fastapi import APIRouter, File, UploadFile, status
 
-from app.dependencies import CurrentAlum, DBSession
+from app.database import DBSession
 from app.schemas.media import AlumniProfilePictureResponse
+from app.services.auth import CurrentAlum
 from app.services.media import (
-    _process_img,
     delete_alumni_profile_picture,
+    process_img,
     save_alumni_profile_picture,
     validate_image_upload,
 )
@@ -27,7 +28,7 @@ async def upload_profile_picture(
     file: UploadFile = File(...),
 ) -> AlumniProfilePictureResponse:
     content = await validate_image_upload(file)
-    processed_buffer = _process_img(io.BytesIO(content))
+    processed_buffer = process_img(io.BytesIO(content))
 
     # Save new picture
     new_filename = save_alumni_profile_picture(processed_buffer)

@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from sqlmodel import func, select
 
-from app.dependencies import DBSession
+from app.database import DBSession
 from app.models import Alum
 from app.schemas.public import EventInformation, PublicDeadline, PublicStatistics
 from app.services.deadlines import deadline_is_open

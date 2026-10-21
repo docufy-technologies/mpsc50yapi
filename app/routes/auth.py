@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 
-from app.dependencies import CurrentAlum, DBSession
+from app.database import DBSession
 from app.helper import now
 from app.models import (
     Acquaintance,
@@ -26,6 +26,7 @@ from app.schemas.alumni import (
 )
 from app.schemas.auth import AlumLogin, PasswordUpdate
 from app.services.auth import (
+    CurrentAlum,
     encode_alum_access_token,
     encode_alum_refresh_token,
     get_refresh_token_record,

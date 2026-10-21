@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import col, select
 
-from app.dependencies import CurrentAlum, DBSession
+from app.database import DBSession
 from app.helper import now
 from app.models import (
     OpenMicEntry,
@@ -22,6 +22,7 @@ from app.schemas.involve import (
     SubcommitteeApplicationInput,
 )
 from app.schemas.referrals import MyReferralsInformation
+from app.services.auth import CurrentAlum
 from app.services.deadlines import ensure_open
 from app.services.referral_queries import referrals_for
 from app.settings import settings

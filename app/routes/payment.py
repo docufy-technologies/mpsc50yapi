@@ -7,10 +7,11 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlmodel import col, select
 
-from app.dependencies import CurrentAlum, DBSession
+from app.database import DBSession
 from app.helper import generate_reg_code, now
 from app.models import Alum, AlumniPayment, Payment
 from app.schemas.payment import PaymentInformation, PaymentSessionResponse
+from app.services.auth import CurrentAlum
 from app.services.sslcommerz import (
     ValidationOutcome,
     create_payment_session,

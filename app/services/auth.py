@@ -1,27 +1,27 @@
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlmodel import select
 
-from app.dependencies import DBSession
+from app.database import DBSession
 from app.models import Admin, Alum, RefreshToken
 from app.services.token import decode_token, encode_token
 from app.settings import settings
 
-argon2id_hasher = PasswordHasher()
+__pwh = PasswordHasher()
 
 
 def hash_password(plain_password: str) -> str:
-    return argon2id_hasher.hash(plain_password)
+    return __pwh.hash(plain_password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
-        return argon2id_hasher.verify(hashed_password, plain_password)
+        return __pwh.verify(hashed_password, plain_password)
     except (VerifyMismatchError, InvalidHashError):
         return False
 
@@ -72,7 +72,7 @@ def encode_admin_refresh_token(admin: Admin) -> tuple[str, RefreshToken]:
     )
 
 
-def _get_uuid_from_token(token: str) -> UUID:
+def __get_uuid_from_token(token: str) -> UUID:
     try:
         payload = decode_token(token)
         uuid_str: str | None = payload.get("uuid")
@@ -91,7 +91,7 @@ def _get_uuid_from_token(token: str) -> UUID:
         ) from e
 
 
-def get_current_alum(
+def __get_current_alum(
     request: Request,
     database_session: DBSession,
 ) -> Alum:
@@ -114,7 +114,7 @@ def get_current_alum(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token type. Expected access token.",
         )
-    uuid = _get_uuid_from_token(token)
+    uuid = __get_uuid_from_token(token)
     alum = database_session.get(Alum, uuid)
     if not alum:
         raise HTTPException(
@@ -129,7 +129,10 @@ def get_current_alum(
     return alum
 
 
-def get_current_admin(
+type CurrentAlum = Annotated[Alum, Depends(__get_current_alum)]
+
+
+def __get_current_admin(
     request: Request,
     database_session: DBSession,
 ) -> Admin:
@@ -152,7 +155,7 @@ def get_current_admin(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token type. Expected access token.",
         )
-    uuid = _get_uuid_from_token(token)
+    uuid = __get_uuid_from_token(token)
     admin = database_session.get(Admin, uuid)
     if not admin or not admin.is_active:
         raise HTTPException(
@@ -160,6 +163,9 @@ def get_current_admin(
         )
 
     return admin
+
+
+type CurrentAdmin = Annotated[Admin, Depends(__get_current_admin)]
 
 
 def get_refresh_token_record(

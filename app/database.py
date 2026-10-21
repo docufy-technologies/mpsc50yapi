@@ -1,3 +1,6 @@
+from typing import Annotated
+
+from fastapi import Depends
 from sqlmodel import Session, create_engine
 
 from .settings import settings
@@ -16,3 +19,6 @@ def get_database_session():
         yield session
     finally:
         session.close()
+
+
+type DBSession = Annotated[Session, Depends(get_database_session)]

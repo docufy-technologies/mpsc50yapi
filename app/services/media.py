@@ -31,7 +31,7 @@ async def validate_image_upload(upload_file: UploadFile) -> bytes:
     return content
 
 
-def _process_img(image_file: BinaryIO) -> io.BytesIO:
+def process_img(image_file: BinaryIO) -> io.BytesIO:
     """Resize image to within settings.img_max_dimension and compress to WEBP."""
     _max_dimension = settings.max_allowed_dimension
     _target_byte_size: int = settings.max_allowed_image_size_bytes

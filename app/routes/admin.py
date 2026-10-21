@@ -5,7 +5,6 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlmodel import col, func, select
 
-from app.dependencies import CurrentAdmin, DBSession
 from app.helper import now
 from app.models import (
     Acquaintance,
@@ -24,6 +23,8 @@ from app.schemas.auth import AdminInfo, AdminLogin, AdminSession
 from app.schemas.payment import PaymentSummary
 from app.schemas.referrals import ReferralDrillDown, ReferralLeaderboardEntry
 from app.services.auth import (
+    CurrentAdmin,
+    DBSession,
     encode_admin_access_token,
     encode_admin_refresh_token,
     get_refresh_token_record,
@@ -63,16 +64,12 @@ def admin_login(credentials: AdminLogin, database_session: DBSession) -> JSONRes
 
     response = JSONResponse(
         status_code=status.HTTP_200_OK,
-        content=AdminSession(
-            expires_in=settings.access_token_ttl_seconds
-        ).model_dump(),
+        content=AdminSession(expires_in=settings.access_token_ttl_seconds).model_dump(),
     )
     response.set_cookie(
         **settings.access_token_cookie_param(admin_access_token, "admin")
     )
-    response.set_cookie(
-        **settings.refresh_token_cookie_param(refresh_token, "admin")
-    )
+    response.set_cookie(**settings.refresh_token_cookie_param(refresh_token, "admin"))
     return response
 
 
@@ -136,9 +133,7 @@ def refresh_admin_access_token(request: Request, database_session: DBSession):
         status_code=status.HTTP_200_OK,
         content={"message": "Token refreshed successfully"},
     )
-    response.set_cookie(
-        **settings.access_token_cookie_param(new_access_token, "admin")
-    )
+    response.set_cookie(**settings.access_token_cookie_param(new_access_token, "admin"))
     response.set_cookie(
         **settings.refresh_token_cookie_param(new_refresh_token, "admin")
     )

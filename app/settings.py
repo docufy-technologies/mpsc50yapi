@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     openmic_entry_limit: int = 2
     openmic_max_duration_minutes: int = 10
 
-    # TODO: Make it editable via connected CRM
+    # TODO: Make it editable via any route
     event_deadlines: dict[DeadlineKey, datetime] = {
         "registration": datetime(2026, 11, 11, 23, 59, 59, tzinfo=UTC)
         + timedelta(hours=6),
